@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.widget
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
@@ -9,11 +10,10 @@ import android.widget.FrameLayout
 import androidx.annotation.IdRes
 import androidx.annotation.MenuRes
 import androidx.appcompat.view.ActionMode
+import androidx.core.view.isVisible
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.util.view.gone
-import eu.kanade.tachiyomi.util.view.visible
-import kotlinx.android.synthetic.main.common_action_toolbar.view.common_action_menu
-import kotlinx.android.synthetic.main.common_action_toolbar.view.common_action_toolbar
+import eu.kanade.tachiyomi.databinding.ActionToolbarBinding
+import eu.kanade.tachiyomi.widget.listener.SimpleAnimationListener
 
 /**
  * A toolbar holding only menu items.
@@ -21,23 +21,21 @@ import kotlinx.android.synthetic.main.common_action_toolbar.view.common_action_t
 class ActionToolbar @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     FrameLayout(context, attrs) {
 
-    init {
-        inflate(context, R.layout.common_action_toolbar, this)
-    }
+    private val binding = ActionToolbarBinding.inflate(LayoutInflater.from(context), this, true)
 
     /**
      * Remove menu items and remove listener.
      */
     fun destroy() {
-        common_action_menu.menu.clear()
-        common_action_menu.setOnMenuItemClickListener(null)
+        binding.menu.menu.clear()
+        binding.menu.setOnMenuItemClickListener(null)
     }
 
     /**
      * Gets a menu item if found.
      */
     fun findItem(@IdRes itemId: Int): MenuItem? {
-        return common_action_menu.menu.findItem(itemId)
+        return binding.menu.menu.findItem(itemId)
     }
 
     /**
@@ -45,14 +43,14 @@ class ActionToolbar @JvmOverloads constructor(context: Context, attrs: Attribute
      */
     fun show(mode: ActionMode, @MenuRes menuRes: Int, listener: (item: MenuItem?) -> Boolean) {
         // Avoid re-inflating the menu
-        if (common_action_menu.menu.size() == 0) {
-            mode.menuInflater.inflate(menuRes, common_action_menu.menu)
-            common_action_menu.setOnMenuItemClickListener { listener(it) }
+        if (binding.menu.menu.size() == 0) {
+            mode.menuInflater.inflate(menuRes, binding.menu.menu)
+            binding.menu.setOnMenuItemClickListener { listener(it) }
         }
 
-        common_action_toolbar.visible()
+        binding.actionToolbar.isVisible = true
         val bottomAnimation = AnimationUtils.loadAnimation(context, R.anim.enter_from_bottom)
-        common_action_toolbar.startAnimation(bottomAnimation)
+        binding.actionToolbar.startAnimation(bottomAnimation)
     }
 
     /**
@@ -60,11 +58,13 @@ class ActionToolbar @JvmOverloads constructor(context: Context, attrs: Attribute
      */
     fun hide() {
         val bottomAnimation = AnimationUtils.loadAnimation(context, R.anim.exit_to_bottom)
-        bottomAnimation.setAnimationListener(object : SimpleAnimationListener() {
-            override fun onAnimationEnd(animation: Animation) {
-                common_action_toolbar.gone()
+        bottomAnimation.setAnimationListener(
+            object : SimpleAnimationListener() {
+                override fun onAnimationEnd(animation: Animation) {
+                    binding.actionToolbar.isVisible = false
+                }
             }
-        })
-        common_action_toolbar.startAnimation(bottomAnimation)
+        )
+        binding.actionToolbar.startAnimation(bottomAnimation)
     }
 }

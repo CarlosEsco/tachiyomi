@@ -1,7 +1,7 @@
 ---
 name: "🐞 Bug report"
 about: Report a bug
-title: "[Bug] Write short description here"
+title: "[Bug] <Write short description here>"
 labels: "bug"
 ---
 
@@ -9,15 +9,21 @@ labels: "bug"
 
 I acknowledge that:
 
-- I have updated to the latest version of the app (stable is v0.9.2)
-- I have updated all extensions
-- If this is an issue with an extension, that I should be opening an issue in https://github.com/inorichi/tachiyomi-extensions
+- I have updated:
+  - To the latest version of the app (stable is v0.11.1)
+  - All extensions
+- I have tried the troubleshooting guide: https://tachiyomi.org/help/guides/troubleshooting-problems/
+- If this is an issue with an extension, that I should be opening an issue in https://github.com/tachiyomiorg/tachiyomi-extensions
+- I have searched the existing issues and this is new ticket **NOT** a duplicate or related to another open issue
+- I will fill out the title and the information in this template
+
+Note that the issue will be automatically closed if you do not fill out the title or requested information.
 
 **DELETE THIS SECTION IF YOU HAVE READ AND ACKNOWLEDGED IT**
 
 ---
 
-### Device information
+## Device information
 * Tachiyomi version: ?
 * Android version: ?
 * Device: ?
@@ -32,5 +38,7 @@ This should happen.
 ### Actual behavior
 This happened instead.
 
-### Other details
+## Other details
 Additional details and attachments.
+
+If you're experiencing crashes, share the crash logs from More → Settings → Advanced → Dump crash logs.

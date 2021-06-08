@@ -11,7 +11,7 @@ import eu.davidea.flexibleadapter.items.IFlexible
 import eu.davidea.viewholders.FlexibleViewHolder
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.model.Filter
-import eu.kanade.tachiyomi.widget.IgnoreFirstSpinnerListener
+import eu.kanade.tachiyomi.widget.listener.IgnoreFirstSpinnerListener
 
 open class SelectItem(val filter: Filter.Select<*>) : AbstractFlexibleItem<SelectItem.Holder>() {
 
@@ -30,7 +30,8 @@ open class SelectItem(val filter: Filter.Select<*>) : AbstractFlexibleItem<Selec
         spinner.prompt = filter.name
         spinner.adapter = ArrayAdapter<Any>(
             holder.itemView.context,
-            android.R.layout.simple_spinner_item, filter.values
+            android.R.layout.simple_spinner_item,
+            filter.values
         ).apply {
             setDropDownViewResource(R.layout.common_spinner_item)
         }

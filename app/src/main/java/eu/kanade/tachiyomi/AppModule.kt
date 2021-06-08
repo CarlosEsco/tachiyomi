@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi
 
 import android.app.Application
-import com.google.gson.Gson
+import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -11,8 +11,7 @@ import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.SourceManager
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
@@ -42,18 +41,19 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory { TrackManager(app) }
 
-        addSingletonFactory { Gson() }
+        addSingletonFactory { Json { ignoreUnknownKeys = true } }
 
         // Asynchronously init expensive components for a faster cold start
+        ContextCompat.getMainExecutor(app).execute {
+            get<PreferencesHelper>()
 
-        GlobalScope.launch { get<PreferencesHelper>() }
+            get<NetworkHelper>()
 
-        GlobalScope.launch { get<NetworkHelper>() }
+            get<SourceManager>()
 
-        GlobalScope.launch { get<SourceManager>() }
+            get<DatabaseHelper>()
 
-        GlobalScope.launch { get<DatabaseHelper>() }
-
-        GlobalScope.launch { get<DownloadManager>() }
+            get<DownloadManager>()
+        }
     }
 }

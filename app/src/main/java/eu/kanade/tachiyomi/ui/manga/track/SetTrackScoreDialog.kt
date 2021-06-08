@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.manga.track
 import android.app.Dialog
 import android.os.Bundle
 import android.widget.NumberPicker
+import androidx.core.os.bundleOf
 import com.afollestad.materialdialogs.MaterialDialog
 import com.afollestad.materialdialogs.customview.customView
 import com.afollestad.materialdialogs.customview.getCustomView
@@ -15,16 +16,17 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class SetTrackScoreDialog<T> : DialogController
-        where T : Controller, T : SetTrackScoreDialog.Listener {
+        where T : Controller {
 
     private val item: TrackItem
 
-    constructor(target: T, item: TrackItem) : super(
-        Bundle().apply {
-            putSerializable(KEY_ITEM_TRACK, item.track)
-        }
+    private lateinit var listener: Listener
+
+    constructor(target: T, listener: Listener, item: TrackItem) : super(
+        bundleOf(KEY_ITEM_TRACK to item.track)
     ) {
         targetController = target
+        this.listener = listener
         this.item = item
     }
 
@@ -47,7 +49,7 @@ class SetTrackScoreDialog<T> : DialogController
                 val np: NumberPicker = view.findViewById(R.id.score_picker)
                 np.clearFocus()
 
-                (targetController as? Listener)?.setScore(item, np.value)
+                listener.setScore(item, np.value)
             }
             .negativeButton(android.R.string.cancel)
 

@@ -1,14 +1,14 @@
 package eu.kanade.tachiyomi.data.track
 
 import androidx.annotation.CallSuper
+import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.NetworkHelper
 import okhttp3.OkHttpClient
-import rx.Completable
-import rx.Observable
 import uy.kohesive.injekt.injectLazy
 
 abstract class TrackService(val id: Int) {
@@ -20,7 +20,8 @@ abstract class TrackService(val id: Int) {
         get() = networkService.client
 
     // Name of the manga sync service to display
-    abstract val name: String
+    @StringRes
+    abstract fun nameRes(): Int
 
     // Application and remote support for reading dates
     open val supportsReadingDates: Boolean = false
@@ -28,6 +29,7 @@ abstract class TrackService(val id: Int) {
     @DrawableRes
     abstract fun getLogo(): Int
 
+    @ColorInt
     abstract fun getLogoColor(): Int
 
     abstract fun getStatusList(): List<Int>
@@ -44,17 +46,15 @@ abstract class TrackService(val id: Int) {
 
     abstract fun displayScore(track: Track): String
 
-    abstract fun add(track: Track): Observable<Track>
+    abstract suspend fun update(track: Track): Track
 
-    abstract fun update(track: Track): Observable<Track>
+    abstract suspend fun bind(track: Track): Track
 
-    abstract fun bind(track: Track): Observable<Track>
+    abstract suspend fun search(query: String): List<TrackSearch>
 
-    abstract fun search(query: String): Observable<List<TrackSearch>>
+    abstract suspend fun refresh(track: Track): Track
 
-    abstract fun refresh(track: Track): Observable<Track>
-
-    abstract fun login(username: String, password: String): Completable
+    abstract suspend fun login(username: String, password: String)
 
     @CallSuper
     open fun logout() {

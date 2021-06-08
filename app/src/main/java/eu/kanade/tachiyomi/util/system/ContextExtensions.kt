@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.util.system
 
 import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
@@ -14,20 +15,30 @@ import android.content.res.Resources
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
+import android.view.Display
 import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.StringRes
+import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
+import androidx.core.graphics.alpha
+import androidx.core.graphics.blue
+import androidx.core.graphics.green
+import androidx.core.graphics.red
+import androidx.core.net.toUri
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.nononsenseapps.filepicker.FilePickerActivity
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.lang.truncateCenter
-import eu.kanade.tachiyomi.widget.CustomLayoutPickerActivity
+import timber.log.Timber
+import java.io.File
 import kotlin.math.roundToInt
 
 /**
@@ -36,8 +47,8 @@ import kotlin.math.roundToInt
  * @param resource the text resource.
  * @param duration the duration of the toast. Defaults to short.
  */
-fun Context.toast(@StringRes resource: Int, duration: Int = Toast.LENGTH_SHORT) {
-    Toast.makeText(this, resource, duration).show()
+fun Context.toast(@StringRes resource: Int, duration: Int = Toast.LENGTH_SHORT, block: (Toast) -> Unit = {}): Toast {
+    return toast(getString(resource), duration, block)
 }
 
 /**
@@ -46,8 +57,11 @@ fun Context.toast(@StringRes resource: Int, duration: Int = Toast.LENGTH_SHORT) 
  * @param text the text to display.
  * @param duration the duration of the toast. Defaults to short.
  */
-fun Context.toast(text: String?, duration: Int = Toast.LENGTH_SHORT) {
-    Toast.makeText(this, text.orEmpty(), duration).show()
+fun Context.toast(text: String?, duration: Int = Toast.LENGTH_SHORT, block: (Toast) -> Unit = {}): Toast {
+    return Toast.makeText(this, text.orEmpty(), duration).also {
+        block(it)
+        it.show()
+    }
 }
 
 /**
@@ -59,10 +73,15 @@ fun Context.toast(text: String?, duration: Int = Toast.LENGTH_SHORT) {
 fun Context.copyToClipboard(label: String, content: String) {
     if (content.isBlank()) return
 
-    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText(label, content))
+    try {
+        val clipboard = getSystemService<ClipboardManager>()!!
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, content))
 
-    toast(getString(R.string.copied_to_clipboard, content.truncateCenter(50)))
+        toast(getString(R.string.copied_to_clipboard, content.truncateCenter(50)))
+    } catch (e: Throwable) {
+        Timber.e(e)
+        toast(R.string.clipboard_copy_error)
+    }
 }
 
 /**
@@ -94,19 +113,6 @@ fun Context.notification(channelId: String, block: (NotificationCompat.Builder.(
 }
 
 /**
- * Helper method to construct an Intent to use a custom file picker.
- * @param currentDir the path the file picker will open with.
- * @return an Intent to start the file picker activity.
- */
-fun Context.getFilePicker(currentDir: String): Intent {
-    return Intent(this, CustomLayoutPickerActivity::class.java)
-        .putExtra(FilePickerActivity.EXTRA_ALLOW_MULTIPLE, false)
-        .putExtra(FilePickerActivity.EXTRA_ALLOW_CREATE_DIR, true)
-        .putExtra(FilePickerActivity.EXTRA_MODE, FilePickerActivity.MODE_DIR)
-        .putExtra(FilePickerActivity.EXTRA_START_PATH, currentDir)
-}
-
-/**
  * Checks if the give permission is granted.
  *
  * @param permission the permission to check.
@@ -126,11 +132,8 @@ fun Context.hasPermission(permission: String) = ContextCompat.checkSelfPermissio
     typedArray.recycle()
 
     if (alphaFactor < 1f) {
-        val alpha = (Color.alpha(color) * alphaFactor).roundToInt()
-        val red = Color.red(color)
-        val green = Color.green(color)
-        val blue = Color.blue(color)
-        return Color.argb(alpha, red, green, blue)
+        val alpha = (color.alpha * alphaFactor).roundToInt()
+        return Color.argb(alpha, color.red, color.green, color.blue)
     }
 
     return color
@@ -160,23 +163,25 @@ val Float.dpToPxEnd: Float
 val Resources.isLTR
     get() = configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR
 
-/**
- * Property to get the notification manager from the context.
- */
 val Context.notificationManager: NotificationManager
-    get() = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    get() = getSystemService()!!
 
-/**
- * Property to get the connectivity manager from the context.
- */
 val Context.connectivityManager: ConnectivityManager
-    get() = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    get() = getSystemService()!!
 
-/**
- * Property to get the power manager from the context.
- */
 val Context.powerManager: PowerManager
-    get() = getSystemService(Context.POWER_SERVICE) as PowerManager
+    get() = getSystemService()!!
+
+val Context.keyguardManager: KeyguardManager
+    get() = getSystemService()!!
+
+val Context.displayCompat: Display?
+    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        display
+    } else {
+        @Suppress("DEPRECATION")
+        getSystemService<WindowManager>()?.defaultDisplay
+    }
 
 /**
  * Convenience method to acquire a partial wake lock.
@@ -237,14 +242,37 @@ fun Context.isServiceRunning(serviceClass: Class<*>): Boolean {
 /**
  * Opens a URL in a custom tab.
  */
-fun Context.openInBrowser(url: String) {
+fun Context.openInBrowser(url: String, @ColorInt toolbarColor: Int? = null) {
+    this.openInBrowser(url.toUri(), toolbarColor)
+}
+
+fun Context.openInBrowser(uri: Uri, @ColorInt toolbarColor: Int? = null) {
     try {
-        val parsedUrl = Uri.parse(url)
         val intent = CustomTabsIntent.Builder()
-            .setToolbarColor(getResourceColor(R.attr.colorPrimary))
+            .setDefaultColorSchemeParams(
+                CustomTabColorSchemeParams.Builder()
+                    .setToolbarColor(toolbarColor ?: getResourceColor(R.attr.colorPrimary))
+                    .build()
+            )
             .build()
-        intent.launchUrl(this, parsedUrl)
+        intent.launchUrl(this, uri)
     } catch (e: Exception) {
         toast(e.message)
     }
+}
+
+fun Context.createFileInCacheDir(name: String): File {
+    val file = File(externalCacheDir, name)
+    if (file.exists()) {
+        file.delete()
+    }
+    file.createNewFile()
+    return file
+}
+
+/**
+ * We consider anything with a width of >= 720dp as a tablet, i.e. with layouts in layout-sw720dp.
+ */
+fun Context.isTablet(): Boolean {
+    return resources.configuration.smallestScreenWidthDp >= 720
 }

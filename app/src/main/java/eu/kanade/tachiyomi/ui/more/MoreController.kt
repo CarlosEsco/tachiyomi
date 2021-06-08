@@ -1,21 +1,24 @@
 package eu.kanade.tachiyomi.ui.more
 
-import android.content.Context
-import android.util.AttributeSet
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.preference.Preference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadService
-import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 import eu.kanade.tachiyomi.ui.base.controller.NoToolbarElevationController
 import eu.kanade.tachiyomi.ui.base.controller.RootController
 import eu.kanade.tachiyomi.ui.base.controller.withFadeTransaction
+import eu.kanade.tachiyomi.ui.category.CategoryController
 import eu.kanade.tachiyomi.ui.download.DownloadController
-import eu.kanade.tachiyomi.ui.migration.MigrationController
+import eu.kanade.tachiyomi.ui.setting.SettingsBackupController
 import eu.kanade.tachiyomi.ui.setting.SettingsController
 import eu.kanade.tachiyomi.ui.setting.SettingsMainController
 import eu.kanade.tachiyomi.util.preference.add
+import eu.kanade.tachiyomi.util.preference.defaultValue
 import eu.kanade.tachiyomi.util.preference.iconRes
 import eu.kanade.tachiyomi.util.preference.iconTint
 import eu.kanade.tachiyomi.util.preference.onClick
@@ -26,8 +29,12 @@ import eu.kanade.tachiyomi.util.preference.switchPreference
 import eu.kanade.tachiyomi.util.preference.titleRes
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.system.openInBrowser
+import rx.Observable
+import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
+import rx.subscriptions.CompositeSubscription
 import uy.kohesive.injekt.injectLazy
+import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 
 class MoreController :
     SettingsController(),
@@ -38,7 +45,10 @@ class MoreController :
     private var isDownloading: Boolean = false
     private var downloadQueueSize: Int = 0
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) = with(screen) {
+    private var untilDestroySubscriptions = CompositeSubscription()
+        private set
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = R.string.label_more
 
         val tintColor = context.getResourceColor(R.attr.colorAccent)
@@ -53,6 +63,15 @@ class MoreController :
             iconTint = tintColor
         }
 
+        switchPreference {
+            key = Keys.incognitoMode
+            summaryRes = R.string.pref_incognito_mode_summary
+            titleRes = R.string.pref_incognito_mode
+            iconRes = R.drawable.ic_glasses_black_24dp
+            iconTint = tintColor
+            defaultValue = false
+        }
+
         preferenceCategory {
             preference {
                 titleRes = R.string.label_download_queue
@@ -61,18 +80,26 @@ class MoreController :
                     initDownloadQueueSummary(this)
                 }
 
-                iconRes = R.drawable.ic_file_download_black_24dp
+                iconRes = R.drawable.ic_get_app_24dp
                 iconTint = tintColor
                 onClick {
                     router.pushController(DownloadController().withFadeTransaction())
                 }
             }
             preference {
-                titleRes = R.string.label_migration
-                iconRes = R.drawable.ic_compare_arrows_black_24dp
+                titleRes = R.string.categories
+                iconRes = R.drawable.ic_label_24dp
                 iconTint = tintColor
                 onClick {
-                    router.pushController(MigrationController().withFadeTransaction())
+                    router.pushController(CategoryController().withFadeTransaction())
+                }
+            }
+            preference {
+                titleRes = R.string.label_backup
+                iconRes = R.drawable.ic_settings_backup_restore_24dp
+                iconTint = tintColor
+                onClick {
+                    router.pushController(SettingsBackupController().withFadeTransaction())
                 }
             }
         }
@@ -113,6 +140,19 @@ class MoreController :
         }
     }
 
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup, savedInstanceState: Bundle?): View {
+        if (untilDestroySubscriptions.isUnsubscribed) {
+            untilDestroySubscriptions = CompositeSubscription()
+        }
+
+        return super.onCreateView(inflater, container, savedInstanceState)
+    }
+
+    override fun onDestroyView(view: View) {
+        super.onDestroyView(view)
+        untilDestroySubscriptions.unsubscribe()
+    }
+
     private fun initDownloadQueueSummary(preference: Preference) {
         // Handle running/paused status change
         DownloadService.runningRelay
@@ -139,16 +179,11 @@ class MoreController :
         }
     }
 
-    private class MoreHeaderPreference @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
-        Preference(context, attrs) {
-
-        init {
-            layoutResource = R.layout.pref_more_header
-            isSelectable = false
-        }
+    private fun <T> Observable<T>.subscribeUntilDestroy(onNext: (T) -> Unit): Subscription {
+        return subscribe(onNext).also { untilDestroySubscriptions.add(it) }
     }
 
     companion object {
-        private const val URL_HELP = "https://tachiyomi.org/help/"
+        const val URL_HELP = "https://tachiyomi.org/help/"
     }
 }

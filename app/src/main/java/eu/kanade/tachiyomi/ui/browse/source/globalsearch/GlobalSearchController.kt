@@ -6,21 +6,20 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
 import androidx.appcompat.widget.SearchView
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
+import dev.chrisbanes.insetter.applyInsetter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.GlobalSearchControllerBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.ui.base.controller.NucleusController
+import eu.kanade.tachiyomi.ui.base.controller.SearchableNucleusController
 import eu.kanade.tachiyomi.ui.base.controller.withFadeTransaction
+import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceController
 import eu.kanade.tachiyomi.ui.manga.MangaController
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import reactivecircus.flowbinding.appcompat.QueryTextEvent
-import reactivecircus.flowbinding.appcompat.queryTextEvents
+import uy.kohesive.injekt.injectLazy
 
 /**
  * This controller shows and manages the different search result in global search.
@@ -30,29 +29,27 @@ import reactivecircus.flowbinding.appcompat.queryTextEvents
 open class GlobalSearchController(
     protected val initialQuery: String? = null,
     protected val extensionFilter: String? = null
-) : NucleusController<GlobalSearchControllerBinding, GlobalSearchPresenter>(),
-    GlobalSearchCardAdapter.OnMangaClickListener {
+) : SearchableNucleusController<GlobalSearchControllerBinding, GlobalSearchPresenter>(),
+    GlobalSearchCardAdapter.OnMangaClickListener,
+    GlobalSearchAdapter.OnTitleClickListener {
+
+    private val preferences: PreferencesHelper by injectLazy()
 
     /**
      * Adapter containing search results grouped by lang.
      */
     protected var adapter: GlobalSearchAdapter? = null
 
+    /**
+     * Ref to the OptionsMenu.SearchItem created in onCreateOptionsMenu
+     */
+    private var optionsMenuSearchItem: MenuItem? = null
+
     init {
         setHasOptionsMenu(true)
     }
 
-    /**
-     * Initiate the view with [R.layout.global_search_controller].
-     *
-     * @param inflater used to load the layout xml.
-     * @param container containing parent views.
-     * @return inflated view
-     */
-    override fun inflateView(inflater: LayoutInflater, container: ViewGroup): View {
-        binding = GlobalSearchControllerBinding.inflate(inflater)
-        return binding.root
-    }
+    override fun createBinding(inflater: LayoutInflater) = GlobalSearchControllerBinding.inflate(inflater)
 
     override fun getTitle(): String? {
         return presenter.query
@@ -73,7 +70,6 @@ open class GlobalSearchController(
      * @param manga clicked item containing manga information.
      */
     override fun onMangaClick(manga: Manga) {
-        // Open MangaController.
         router.pushController(MangaController(manga, true).withFadeTransaction())
     }
 
@@ -94,34 +90,32 @@ open class GlobalSearchController(
      * @param inflater used to load the menu xml.
      */
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        // Inflate menu.
-        inflater.inflate(R.menu.global_search, menu)
+        createOptionsMenu(
+            menu,
+            inflater,
+            R.menu.global_search,
+            R.id.action_search,
+            null,
+            false // the onMenuItemActionExpand will handle this
+        )
 
-        // Initialize search menu
-        val searchItem = menu.findItem(R.id.action_search)
-        val searchView = searchItem.actionView as SearchView
-        searchView.maxWidth = Int.MAX_VALUE
+        optionsMenuSearchItem = menu.findItem(R.id.action_search)
+    }
 
-        searchItem.setOnActionExpandListener(object : MenuItem.OnActionExpandListener {
-            override fun onMenuItemActionExpand(item: MenuItem?): Boolean {
-                searchView.onActionViewExpanded() // Required to show the query in the view
-                searchView.setQuery(presenter.query, false)
-                return true
-            }
+    override fun onSearchMenuItemActionExpand(item: MenuItem?) {
+        super.onSearchMenuItemActionExpand(item)
+        val searchView = optionsMenuSearchItem?.actionView as SearchView
+        searchView.onActionViewExpanded() // Required to show the query in the view
 
-            override fun onMenuItemActionCollapse(item: MenuItem?): Boolean {
-                return true
-            }
-        })
+        if (nonSubmittedQuery.isBlank()) {
+            searchView.setQuery(presenter.query, false)
+        }
+    }
 
-        searchView.queryTextEvents()
-            .filter { it is QueryTextEvent.QuerySubmitted }
-            .onEach {
-                presenter.search(it.queryText.toString())
-                searchItem.collapseActionView()
-                setTitle() // Update toolbar title
-            }
-            .launchIn(scope)
+    override fun onSearchViewQueryTextSubmit(query: String?) {
+        presenter.search(query ?: "")
+        optionsMenuSearchItem?.collapseActionView()
+        setTitle() // Update toolbar title
     }
 
     /**
@@ -131,6 +125,12 @@ open class GlobalSearchController(
      */
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
+
+        binding.recycler.applyInsetter {
+            type(navigationBars = true) {
+                padding()
+            }
+        }
 
         adapter = GlobalSearchAdapter(this)
 
@@ -179,7 +179,21 @@ open class GlobalSearchController(
      * @param searchResult result of search.
      */
     fun setItems(searchResult: List<GlobalSearchItem>) {
+        if (searchResult.isEmpty() && preferences.searchPinnedSourcesOnly()) {
+            binding.emptyView.show(R.string.no_pinned_sources)
+        } else {
+            binding.emptyView.hide()
+        }
+
         adapter?.updateDataSet(searchResult)
+
+        val progress = searchResult.mapNotNull { it.results }.size.toDouble() / searchResult.size
+        if (progress < 1) {
+            binding.progressBar.isVisible = true
+            binding.progressBar.progress = (progress * 100).toInt()
+        } else {
+            binding.progressBar.isVisible = false
+        }
     }
 
     /**
@@ -189,5 +203,13 @@ open class GlobalSearchController(
      */
     fun onMangaInitialized(source: CatalogueSource, manga: Manga) {
         getHolder(source)?.setImage(manga)
+    }
+
+    /**
+     * Opens a catalogue with the given search.
+     */
+    override fun onTitleClick(source: CatalogueSource) {
+        presenter.preferences.lastUsedSource().set(source.id)
+        router.pushController(BrowseSourceController(source, presenter.query).withFadeTransaction())
     }
 }

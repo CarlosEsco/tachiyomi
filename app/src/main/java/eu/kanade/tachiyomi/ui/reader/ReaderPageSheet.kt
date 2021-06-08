@@ -1,15 +1,13 @@
 package eu.kanade.tachiyomi.ui.reader
 
-import android.os.Bundle
-import android.view.ViewGroup
+import android.view.LayoutInflater
+import android.view.View
 import com.afollestad.materialdialogs.MaterialDialog
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.databinding.ReaderPageSheetBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
-import kotlinx.android.synthetic.main.reader_page_sheet.save_layout
-import kotlinx.android.synthetic.main.reader_page_sheet.set_as_cover_layout
-import kotlinx.android.synthetic.main.reader_page_sheet.share_layout
+import eu.kanade.tachiyomi.widget.sheet.BaseBottomSheetDialog
 
 /**
  * Sheet to show when a page is long clicked.
@@ -17,24 +15,18 @@ import kotlinx.android.synthetic.main.reader_page_sheet.share_layout
 class ReaderPageSheet(
     private val activity: ReaderActivity,
     private val page: ReaderPage
-) : BottomSheetDialog(activity) {
+) : BaseBottomSheetDialog(activity) {
 
-    private val view = activity.layoutInflater.inflate(R.layout.reader_page_sheet, null)
+    private lateinit var binding: ReaderPageSheetBinding
 
-    init {
-        setContentView(view)
+    override fun createView(inflater: LayoutInflater): View {
+        binding = ReaderPageSheetBinding.inflate(activity.layoutInflater, null, false)
 
-        set_as_cover_layout.setOnClickListener { setAsCover() }
-        share_layout.setOnClickListener { share() }
-        save_layout.setOnClickListener { save() }
-    }
+        binding.setAsCoverLayout.setOnClickListener { setAsCover() }
+        binding.shareLayout.setOnClickListener { share() }
+        binding.saveLayout.setOnClickListener { save() }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val width = context.resources.getDimensionPixelSize(R.dimen.bottom_sheet_width)
-        if (width > 0) {
-            window?.setLayout(width, ViewGroup.LayoutParams.MATCH_PARENT)
-        }
+        return binding.root
     }
 
     /**

@@ -2,13 +2,14 @@ package eu.kanade.tachiyomi.data.track.shikimori
 
 import android.content.Context
 import android.graphics.Color
-import com.google.gson.Gson
+import androidx.annotation.StringRes
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
-import rx.Completable
-import rx.Observable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import uy.kohesive.injekt.injectLazy
 
 class Shikimori(private val context: Context, id: Int) : TrackService(id) {
@@ -20,18 +21,16 @@ class Shikimori(private val context: Context, id: Int) : TrackService(id) {
         const val DROPPED = 4
         const val PLANNING = 5
         const val REPEATING = 6
-
-        const val DEFAULT_STATUS = READING
-        const val DEFAULT_SCORE = 0
     }
 
-    override val name = "Shikimori"
+    private val json: Json by injectLazy()
 
-    private val gson: Gson by injectLazy()
-
-    private val interceptor by lazy { ShikimoriInterceptor(this, gson) }
+    private val interceptor by lazy { ShikimoriInterceptor(this) }
 
     private val api by lazy { ShikimoriApi(client, interceptor) }
+
+    @StringRes
+    override fun nameRes() = R.string.tracker_shikimori
 
     override fun getScoreList(): List<String> {
         return IntRange(0, 10).map(Int::toString)
@@ -41,43 +40,38 @@ class Shikimori(private val context: Context, id: Int) : TrackService(id) {
         return track.score.toInt().toString()
     }
 
-    override fun add(track: Track): Observable<Track> {
+    private suspend fun add(track: Track): Track {
         return api.addLibManga(track, getUsername())
     }
 
-    override fun update(track: Track): Observable<Track> {
+    override suspend fun update(track: Track): Track {
         return api.updateLibManga(track, getUsername())
     }
 
-    override fun bind(track: Track): Observable<Track> {
-        return api.findLibManga(track, getUsername())
-            .flatMap { remoteTrack ->
-                if (remoteTrack != null) {
-                    track.copyPersonalFrom(remoteTrack)
-                    track.library_id = remoteTrack.library_id
-                    update(track)
-                } else {
-                    // Set default fields if it's not found in the list
-                    track.score = DEFAULT_SCORE.toFloat()
-                    track.status = DEFAULT_STATUS
-                    add(track)
-                }
-            }
+    override suspend fun bind(track: Track): Track {
+        val remoteTrack = api.findLibManga(track, getUsername())
+        return if (remoteTrack != null) {
+            track.copyPersonalFrom(remoteTrack)
+            track.library_id = remoteTrack.library_id
+            update(track)
+        } else {
+            // Set default fields if it's not found in the list
+            track.status = READING
+            track.score = 0F
+            add(track)
+        }
     }
 
-    override fun search(query: String): Observable<List<TrackSearch>> {
+    override suspend fun search(query: String): List<TrackSearch> {
         return api.search(query)
     }
 
-    override fun refresh(track: Track): Observable<Track> {
-        return api.findLibManga(track, getUsername())
-            .map { remoteTrack ->
-                if (remoteTrack != null) {
-                    track.copyPersonalFrom(remoteTrack)
-                    track.total_chapters = remoteTrack.total_chapters
-                }
-                track
-            }
+    override suspend fun refresh(track: Track): Track {
+        api.findLibManga(track, getUsername())?.let { remoteTrack ->
+            track.copyPersonalFrom(remoteTrack)
+            track.total_chapters = remoteTrack.total_chapters
+        }
+        return track
     }
 
     override fun getLogo() = R.drawable.ic_tracker_shikimori
@@ -102,28 +96,26 @@ class Shikimori(private val context: Context, id: Int) : TrackService(id) {
 
     override fun getCompletionStatus(): Int = COMPLETED
 
-    override fun login(username: String, password: String) = login(password)
+    override suspend fun login(username: String, password: String) = login(password)
 
-    fun login(code: String): Completable {
-        return api.accessToken(code).map { oauth: OAuth? ->
+    suspend fun login(code: String) {
+        try {
+            val oauth = api.accessToken(code)
             interceptor.newAuth(oauth)
-            if (oauth != null) {
-                val user = api.getCurrentUser()
-                saveCredentials(user.toString(), oauth.access_token)
-            }
-        }.doOnError {
+            val user = api.getCurrentUser()
+            saveCredentials(user.toString(), oauth.access_token)
+        } catch (e: Throwable) {
             logout()
-        }.toCompletable()
+        }
     }
 
     fun saveToken(oauth: OAuth?) {
-        val json = gson.toJson(oauth)
-        preferences.trackToken(this).set(json)
+        preferences.trackToken(this).set(json.encodeToString(oauth))
     }
 
     fun restoreToken(): OAuth? {
         return try {
-            gson.fromJson(preferences.trackToken(this).get(), OAuth::class.java)
+            json.decodeFromString<OAuth>(preferences.trackToken(this).get())
         } catch (e: Exception) {
             null
         }

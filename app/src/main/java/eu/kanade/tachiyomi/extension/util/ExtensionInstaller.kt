@@ -7,15 +7,17 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
+import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import com.jakewharton.rxrelay.PublishRelay
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.util.storage.getUriCompat
-import java.io.File
-import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.android.schedulers.AndroidSchedulers
 import timber.log.Timber
+import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * The installer which installs, updates and uninstalls the extensions.
@@ -27,7 +29,7 @@ internal class ExtensionInstaller(private val context: Context) {
     /**
      * The system's download manager
      */
-    private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    private val downloadManager = context.getSystemService<DownloadManager>()!!
 
     /**
      * The broadcast receiver which listens to download completion events.
@@ -63,7 +65,7 @@ internal class ExtensionInstaller(private val context: Context) {
         // Register the receiver after removing (and unregistering) the previous download
         downloadReceiver.register()
 
-        val downloadUri = Uri.parse(url)
+        val downloadUri = url.toUri()
         val request = DownloadManager.Request(downloadUri)
             .setTitle(extension.name)
             .setMimeType(APK_MIME)
@@ -138,8 +140,7 @@ internal class ExtensionInstaller(private val context: Context) {
      * @param pkgName The package name of the extension to uninstall
      */
     fun uninstallApk(pkgName: String) {
-        val packageUri = Uri.parse("package:$pkgName")
-        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, packageUri)
+        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, "package:$pkgName".toUri())
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         context.startActivity(intent)

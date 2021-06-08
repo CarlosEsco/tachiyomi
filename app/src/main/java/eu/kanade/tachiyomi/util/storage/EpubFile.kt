@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.util.storage
 
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import java.io.Closeable
 import java.io.File
 import java.io.InputStream
@@ -10,8 +12,6 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 
 /**
  * Wrapper over ZipFile to load files in epub format.
@@ -150,7 +150,7 @@ class EpubFile(file: File) : Closeable {
      * Returns all the images contained in every page from the epub.
      */
     private fun getImagesFromPages(pages: List<String>, packageHref: String): List<String> {
-        val result = ArrayList<String>()
+        val result = mutableListOf<String>()
         val basePath = getParentDirectory(packageHref)
         pages.forEach { page ->
             val entryPath = resolveZipPath(basePath, page)
@@ -175,10 +175,10 @@ class EpubFile(file: File) : Closeable {
      */
     private fun getPathSeparator(): String {
         val meta = zip.getEntry("META-INF\\container.xml")
-        if (meta != null) {
-            return "\\"
+        return if (meta != null) {
+            "\\"
         } else {
-            return "/"
+            "/"
         }
     }
 
@@ -206,10 +206,10 @@ class EpubFile(file: File) : Closeable {
      */
     private fun getParentDirectory(path: String): String {
         val separatorIndex = path.lastIndexOf(pathSeparator)
-        if (separatorIndex >= 0) {
-            return path.substring(0, separatorIndex)
+        return if (separatorIndex >= 0) {
+            path.substring(0, separatorIndex)
         } else {
-            return ""
+            ""
         }
     }
 }

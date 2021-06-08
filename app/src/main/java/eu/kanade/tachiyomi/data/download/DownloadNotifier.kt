@@ -12,9 +12,8 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.util.lang.chop
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.notificationManager
+import uy.kohesive.injekt.injectLazy
 import java.util.regex.Pattern
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 /**
  * DownloadNotifier is used to show notifications when downloading one or multiple chapters.
@@ -23,11 +22,27 @@ import uy.kohesive.injekt.api.get
  */
 internal class DownloadNotifier(private val context: Context) {
 
-    private val notificationBuilder = context.notificationBuilder(Notifications.CHANNEL_DOWNLOADER) {
-        setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
+    private val preferences: PreferencesHelper by injectLazy()
+
+    private val progressNotificationBuilder by lazy {
+        context.notificationBuilder(Notifications.CHANNEL_DOWNLOADER_PROGRESS) {
+            setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
+            setAutoCancel(false)
+            setOnlyAlertOnce(true)
+        }
     }
 
-    private val preferences by lazy { Injekt.get<PreferencesHelper>() }
+    private val completeNotificationBuilder by lazy {
+        context.notificationBuilder(Notifications.CHANNEL_DOWNLOADER_COMPLETE) {
+            setAutoCancel(false)
+        }
+    }
+
+    private val errorNotificationBuilder by lazy {
+        context.notificationBuilder(Notifications.CHANNEL_DOWNLOADER_ERROR) {
+            setAutoCancel(false)
+        }
+    }
 
     /**
      * Status of download. Used for correct notification icon.
@@ -49,25 +64,16 @@ internal class DownloadNotifier(private val context: Context) {
      *
      * @param id the id of the notification.
      */
-    private fun NotificationCompat.Builder.show(id: Int = Notifications.ID_DOWNLOAD_CHAPTER) {
+    private fun NotificationCompat.Builder.show(id: Int) {
         context.notificationManager.notify(id, build())
-    }
-
-    /**
-     * Clear old actions if they exist.
-     */
-    private fun clearActions() = with(notificationBuilder) {
-        if (mActions.isNotEmpty()) {
-            mActions.clear()
-        }
     }
 
     /**
      * Dismiss the downloader's notification. Downloader error notifications use a different id, so
      * those can only be dismissed by the user.
      */
-    fun dismiss() {
-        context.notificationManager.cancel(Notifications.ID_DOWNLOAD_CHAPTER)
+    fun dismissProgress() {
+        context.notificationManager.cancel(Notifications.ID_DOWNLOAD_CHAPTER_PROGRESS)
     }
 
     /**
@@ -76,12 +82,9 @@ internal class DownloadNotifier(private val context: Context) {
      * @param download download object containing download information.
      */
     fun onProgressChange(download: Download) {
-        // Create notification
-        with(notificationBuilder) {
-            // Check if first call.
+        with(progressNotificationBuilder) {
             if (!isDownloading) {
                 setSmallIcon(android.R.drawable.stat_sys_download)
-                setAutoCancel(false)
                 clearActions()
                 // Open download manager when clicked
                 setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
@@ -95,7 +98,9 @@ internal class DownloadNotifier(private val context: Context) {
             }
 
             val downloadingProgressText = context.getString(
-                R.string.chapter_downloading_progress, download.downloadedImages, download.pages!!.size
+                R.string.chapter_downloading_progress,
+                download.downloadedImages,
+                download.pages!!.size
             )
 
             if (preferences.hideNotificationContent()) {
@@ -109,22 +114,22 @@ internal class DownloadNotifier(private val context: Context) {
             }
 
             setProgress(download.pages!!.size, download.downloadedImages, false)
-        }
+            setOngoing(true)
 
-        // Displays the progress bar on notification
-        notificationBuilder.show()
+            show(Notifications.ID_DOWNLOAD_CHAPTER_PROGRESS)
+        }
     }
 
     /**
      * Show notification when download is paused.
      */
-    fun onDownloadPaused() {
-        with(notificationBuilder) {
+    fun onPaused() {
+        with(progressNotificationBuilder) {
             setContentTitle(context.getString(R.string.chapter_paused))
             setContentText(context.getString(R.string.download_notifier_download_paused))
             setSmallIcon(R.drawable.ic_pause_24dp)
-            setAutoCancel(false)
             setProgress(0, 0, false)
+            setOngoing(false)
             clearActions()
             // Open download manager when clicked
             setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
@@ -140,12 +145,37 @@ internal class DownloadNotifier(private val context: Context) {
                 context.getString(R.string.action_cancel_all),
                 NotificationReceiver.clearDownloadsPendingBroadcast(context)
             )
+
+            show(Notifications.ID_DOWNLOAD_CHAPTER_PROGRESS)
         }
 
-        // Show notification.
-        notificationBuilder.show()
-
         // Reset initial values
+        isDownloading = false
+    }
+
+    /**
+     *  This function shows a notification to inform download tasks are done.
+     */
+    fun onComplete() {
+        dismissProgress()
+
+        if (!errorThrown) {
+            // Create notification
+            with(completeNotificationBuilder) {
+                setContentTitle(context.getString(R.string.download_notifier_downloader_title))
+                setContentText(context.getString(R.string.download_notifier_download_finish))
+                setSmallIcon(android.R.drawable.stat_sys_download_done)
+                clearActions()
+                setAutoCancel(true)
+                setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
+                setProgress(0, 0, false)
+
+                show(Notifications.ID_DOWNLOAD_CHAPTER_COMPLETE)
+            }
+        }
+
+        // Reset states to default
+        errorThrown = false
         isDownloading = false
     }
 
@@ -155,7 +185,7 @@ internal class DownloadNotifier(private val context: Context) {
      * @param reason the text to show.
      */
     fun onWarning(reason: String) {
-        with(notificationBuilder) {
+        with(errorNotificationBuilder) {
             setContentTitle(context.getString(R.string.download_notifier_downloader_title))
             setContentText(reason)
             setSmallIcon(android.R.drawable.stat_sys_warning)
@@ -163,8 +193,9 @@ internal class DownloadNotifier(private val context: Context) {
             clearActions()
             setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
             setProgress(0, 0, false)
+
+            show(Notifications.ID_DOWNLOAD_CHAPTER_ERROR)
         }
-        notificationBuilder.show()
 
         // Reset download information
         isDownloading = false
@@ -179,7 +210,7 @@ internal class DownloadNotifier(private val context: Context) {
      */
     fun onError(error: String? = null, chapter: String? = null) {
         // Create notification
-        with(notificationBuilder) {
+        with(errorNotificationBuilder) {
             setContentTitle(
                 chapter
                     ?: context.getString(R.string.download_notifier_downloader_title)
@@ -187,11 +218,11 @@ internal class DownloadNotifier(private val context: Context) {
             setContentText(error ?: context.getString(R.string.download_notifier_unknown_error))
             setSmallIcon(android.R.drawable.stat_sys_warning)
             clearActions()
-            setAutoCancel(false)
             setContentIntent(NotificationHandler.openDownloadManagerPendingActivity(context))
             setProgress(0, 0, false)
+
+            show(Notifications.ID_DOWNLOAD_CHAPTER_ERROR)
         }
-        notificationBuilder.show(Notifications.ID_DOWNLOAD_CHAPTER_ERROR)
 
         // Reset download information
         errorThrown = true

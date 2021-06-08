@@ -1,62 +1,53 @@
 package eu.kanade.tachiyomi.ui.browse.source
 
 import android.view.View
+import androidx.core.view.isVisible
+import eu.davidea.viewholders.FlexibleViewHolder
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.databinding.SourceMainControllerCardItemBinding
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.icon
-import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
-import eu.kanade.tachiyomi.ui.base.holder.SlicedHolder
-import eu.kanade.tachiyomi.util.view.gone
-import eu.kanade.tachiyomi.util.view.visible
-import io.github.mthli.slice.Slice
-import kotlinx.android.synthetic.main.source_main_controller_card_item.card
-import kotlinx.android.synthetic.main.source_main_controller_card_item.image
-import kotlinx.android.synthetic.main.source_main_controller_card_item.source_browse
-import kotlinx.android.synthetic.main.source_main_controller_card_item.source_latest
-import kotlinx.android.synthetic.main.source_main_controller_card_item.title
+import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.view.setVectorCompat
 
-class SourceHolder(view: View, override val adapter: SourceAdapter) :
-    BaseFlexibleViewHolder(view, adapter),
-    SlicedHolder {
+class SourceHolder(private val view: View, val adapter: SourceAdapter) :
+    FlexibleViewHolder(view, adapter) {
 
-    override val slice = Slice(card).apply {
-        setColor(adapter.cardBackground)
-    }
-
-    override val viewToSlice: View
-        get() = card
+    private val binding = SourceMainControllerCardItemBinding.bind(view)
 
     init {
-        source_browse.setOnClickListener {
-            adapter.browseClickListener.onBrowseClick(bindingAdapterPosition)
+        binding.sourceLatest.setOnClickListener {
+            adapter.clickListener.onLatestClick(bindingAdapterPosition)
         }
 
-        source_latest.setOnClickListener {
-            adapter.latestClickListener.onLatestClick(bindingAdapterPosition)
+        binding.pin.setOnClickListener {
+            adapter.clickListener.onPinClick(bindingAdapterPosition)
         }
     }
 
     fun bind(item: SourceItem) {
         val source = item.source
-        setCardEdges(item)
 
-        // Set source name
-        title.text = source.name
+        binding.title.text = source.name
+        binding.subtitle.isVisible = source !is LocalSource
+        binding.subtitle.text = LocaleHelper.getDisplayName(source.lang)
 
-        // Set circle letter image.
+        // Set source icon
         itemView.post {
             val icon = source.icon()
             when {
-                icon != null -> image.setImageDrawable(icon)
-                item.source.id == LocalSource.ID -> image.setImageResource(R.mipmap.ic_local_source)
+                icon != null -> binding.image.setImageDrawable(icon)
+                item.source.id == LocalSource.ID -> binding.image.setImageResource(R.mipmap.ic_local_source)
             }
         }
 
-        source_browse.setText(R.string.browse)
-        if (source.supportsLatest) {
-            source_latest.visible()
+        binding.sourceLatest.isVisible = source.supportsLatest
+
+        binding.pin.isVisible = true
+        if (item.isPinned) {
+            binding.pin.setVectorCompat(R.drawable.ic_push_pin_24dp, R.attr.colorAccent)
         } else {
-            source_latest.gone()
+            binding.pin.setVectorCompat(R.drawable.ic_push_pin_outline_24dp, android.R.attr.textColorHint)
         }
     }
 }

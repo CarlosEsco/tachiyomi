@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.ui.browse
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
+import androidx.core.os.bundleOf
 import com.bluelinelabs.conductor.Controller
 import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
@@ -20,8 +20,9 @@ import eu.kanade.tachiyomi.ui.base.controller.RootController
 import eu.kanade.tachiyomi.ui.base.controller.RxController
 import eu.kanade.tachiyomi.ui.base.controller.TabbedController
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionController
+import eu.kanade.tachiyomi.ui.browse.migration.sources.MigrationSourcesController
 import eu.kanade.tachiyomi.ui.browse.source.SourceController
-import kotlinx.android.synthetic.main.main_activity.tabs
+import eu.kanade.tachiyomi.ui.main.MainActivity
 import uy.kohesive.injekt.injectLazy
 
 class BrowseController :
@@ -30,9 +31,7 @@ class BrowseController :
     TabbedController {
 
     constructor(toExtensions: Boolean = false) : super(
-        Bundle().apply {
-            putBoolean(TO_EXTENSIONS_EXTRA, toExtensions)
-        }
+        bundleOf(TO_EXTENSIONS_EXTRA to toExtensions)
     )
 
     @Suppress("unused")
@@ -50,10 +49,7 @@ class BrowseController :
         return resources!!.getString(R.string.browse)
     }
 
-    override fun inflateView(inflater: LayoutInflater, container: ViewGroup): View {
-        binding = PagerControllerBinding.inflate(inflater)
-        return binding.root
-    }
+    override fun createBinding(inflater: LayoutInflater) = PagerControllerBinding.inflate(inflater)
 
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
@@ -74,7 +70,7 @@ class BrowseController :
     override fun onChangeStarted(handler: ControllerChangeHandler, type: ControllerChangeType) {
         super.onChangeStarted(handler, type)
         if (type.isEnter) {
-            activity?.tabs?.apply {
+            (activity as? MainActivity)?.binding?.tabs?.apply {
                 setupWithViewPager(binding.pager)
 
                 // Show badge on tab for extension updates
@@ -95,12 +91,8 @@ class BrowseController :
         tabs.getTabAt(EXTENSIONS_CONTROLLER)?.removeBadge()
     }
 
-    fun pushController(transaction: RouterTransaction) {
-        router.pushController(transaction)
-    }
-
     fun setExtensionUpdateBadge() {
-        activity?.tabs?.apply {
+        (activity as? MainActivity)?.binding?.tabs?.apply {
             val updates = preferences.extensionUpdatesCount().get()
             if (updates > 0) {
                 val badge: BadgeDrawable? = getTabAt(1)?.orCreateBadge
@@ -115,7 +107,8 @@ class BrowseController :
 
         private val tabTitles = listOf(
             R.string.label_sources,
-            R.string.label_extensions
+            R.string.label_extensions,
+            R.string.label_migration
         )
             .map { resources!!.getString(it) }
 
@@ -128,6 +121,7 @@ class BrowseController :
                 val controller: Controller = when (position) {
                     SOURCES_CONTROLLER -> SourceController()
                     EXTENSIONS_CONTROLLER -> ExtensionController()
+                    MIGRATION_CONTROLLER -> MigrationSourcesController()
                     else -> error("Wrong position $position")
                 }
                 router.setRoot(RouterTransaction.with(controller))
@@ -144,5 +138,6 @@ class BrowseController :
 
         const val SOURCES_CONTROLLER = 0
         const val EXTENSIONS_CONTROLLER = 1
+        const val MIGRATION_CONTROLLER = 2
     }
 }

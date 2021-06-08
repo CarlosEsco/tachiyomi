@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?attr/selectableItemBackground"
+    android:background="@drawable/selectable_item_background"
     android:baselineAligned="false"
     android:focusable="true"
     android:paddingStart="?attr/listPreferredItemPaddingStart"
@@ -23,7 +23,7 @@
             android:imeOptions="actionDone"
             android:inputType="text"
             android:maxLines="1"
-            android:textAppearance="@style/TextAppearance.AppCompat.Body2" />
+            android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
 
     </com.google.android.material.textfield.TextInputLayout>
 

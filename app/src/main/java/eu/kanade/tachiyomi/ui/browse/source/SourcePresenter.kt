@@ -6,13 +6,17 @@ import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.base.presenter.BasePresenter
-import java.util.TreeMap
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import rx.Observable
 import rx.Subscription
-import rx.android.schedulers.AndroidSchedulers
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.TreeMap
 
 /**
  * Presenter of [SourceController]
@@ -48,7 +52,7 @@ class SourcePresenter(
         sourceSubscription?.unsubscribe()
 
         val pinnedSources = mutableListOf<SourceItem>()
-        val pinnedCatalogues = preferences.pinnedCatalogues().get()
+        val pinnedSourceIds = preferences.pinnedSources().get()
 
         val map = TreeMap<String, MutableList<CatalogueSource>> { d1, d2 ->
             // Catalogues without a lang defined will be placed at the end
@@ -62,11 +66,12 @@ class SourcePresenter(
         var sourceItems = byLang.flatMap {
             val langItem = LangItem(it.key)
             it.value.map { source ->
-                if (source.id.toString() in pinnedCatalogues) {
-                    pinnedSources.add(SourceItem(source, LangItem(PINNED_KEY)))
+                val isPinned = source.id.toString() in pinnedSourceIds
+                if (isPinned) {
+                    pinnedSources.add(SourceItem(source, LangItem(PINNED_KEY), isPinned))
                 }
 
-                SourceItem(source, langItem)
+                SourceItem(source, langItem, isPinned)
             }
         }
 
@@ -79,16 +84,24 @@ class SourcePresenter(
     }
 
     private fun loadLastUsedSource() {
-        val sharedObs = preferences.lastUsedCatalogueSource().asObservable().share()
+        // Immediate initial load
+        preferences.lastUsedSource().get().let { updateLastUsedSource(it) }
 
-        // Emit the first item immediately but delay subsequent emissions by 500ms.
-        Observable.merge(
-            sharedObs.take(1),
-            sharedObs.skip(1).delay(500, TimeUnit.MILLISECONDS, AndroidSchedulers.mainThread())
-        )
+        // Subsequent updates
+        preferences.lastUsedSource().asFlow()
+            .drop(1)
+            .onStart { delay(500) }
             .distinctUntilChanged()
-            .map { item -> (sourceManager.get(item) as? CatalogueSource)?.let { SourceItem(it) } }
-            .subscribeLatestCache(SourceController::setLastUsedSource)
+            .onEach { updateLastUsedSource(it) }
+            .launchIn(presenterScope)
+    }
+
+    private fun updateLastUsedSource(sourceId: Long) {
+        val source = (sourceManager.get(sourceId) as? CatalogueSource)?.let {
+            val isPinned = it.id.toString() in preferences.pinnedSources().get()
+            SourceItem(it, null, isPinned)
+        }
+        source?.let { view?.setLastUsedSource(it) }
     }
 
     fun updateSources() {
@@ -104,12 +117,12 @@ class SourcePresenter(
      */
     private fun getEnabledSources(): List<CatalogueSource> {
         val languages = preferences.enabledLanguages().get()
-        val hiddenCatalogues = preferences.hiddenCatalogues().get()
+        val disabledSourceIds = preferences.disabledSources().get()
 
         return sourceManager.getCatalogueSources()
             .filter { it.lang in languages }
-            .filterNot { it.id.toString() in hiddenCatalogues }
-            .sortedBy { "(${it.lang}) ${it.name}" } +
+            .filterNot { it.id.toString() in disabledSourceIds }
+            .sortedBy { "(${it.lang}) ${it.name.lowercase()}" } +
             sourceManager.get(LocalSource.ID) as LocalSource
     }
 

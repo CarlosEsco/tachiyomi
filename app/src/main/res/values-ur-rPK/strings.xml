@@ -12,7 +12,6 @@
     <string name="label_library">لائبریری</string>
     <string name="label_recent_updates">اپڈیٹس</string>
     <string name="label_recent_manga">ہسٹری</string>
-    <string name="label_categories">اقسام</string>
     <string name="label_backup">بیک اپ</string>
     <string name="label_migration">ماخذ منتقلی</string>
     <string name="label_extensions">ایکسٹینشنز</string>
@@ -24,7 +23,6 @@
     <string name="action_filter_downloaded">ڈاؤن لوڈ شدہ</string>
     <string name="action_filter_bookmarked">بُک مارک شدہ</string>
     <string name="action_filter_unread">پڑھا نہیں گیا</string>
-    <string name="action_filter_read">پڑھ لیا</string>
     <string name="action_filter_empty">فلٹر ہٹائیں</string>
     <string name="action_sort_alpha">حروف تہجی کے لحاظ سے</string>
     <string name="action_sort_total">کل ابواب</string>

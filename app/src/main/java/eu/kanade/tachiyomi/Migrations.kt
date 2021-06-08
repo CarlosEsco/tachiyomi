@@ -1,11 +1,22 @@
 package eu.kanade.tachiyomi
 
+import android.os.Build
+import androidx.core.content.edit
+import androidx.preference.PreferenceManager
 import eu.kanade.tachiyomi.data.backup.BackupCreatorJob
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
+import eu.kanade.tachiyomi.data.preference.PreferenceKeys
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.updater.UpdaterJob
 import eu.kanade.tachiyomi.extension.ExtensionUpdateJob
+import eu.kanade.tachiyomi.network.PREF_DOH_CLOUDFLARE
 import eu.kanade.tachiyomi.ui.library.LibrarySort
+import eu.kanade.tachiyomi.ui.reader.setting.OrientationType
+import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.widget.ExtendedNavigationView
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
 
 object Migrations {
@@ -18,13 +29,13 @@ object Migrations {
      */
     fun upgrade(preferences: PreferencesHelper): Boolean {
         val context = preferences.context
-        val oldVersion = preferences.lastVersionCode().get()
 
         // Cancel app updater job for debug builds that don't include it
         if (BuildConfig.DEBUG && !BuildConfig.INCLUDE_UPDATER) {
             UpdaterJob.cancelTask(context)
         }
 
+        val oldVersion = preferences.lastVersionCode().get()
         if (oldVersion < BuildConfig.VERSION_CODE) {
             preferences.lastVersionCode().set(BuildConfig.VERSION_CODE)
 
@@ -85,12 +96,103 @@ object Migrations {
             }
             if (oldVersion < 44) {
                 // Reset sorting preference if using removed sort by source
+                @Suppress("DEPRECATION")
                 if (preferences.librarySortingMode().get() == LibrarySort.SOURCE) {
                     preferences.librarySortingMode().set(LibrarySort.ALPHA)
                 }
             }
+            if (oldVersion < 52) {
+                // Migrate library filters to tri-state versions
+                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+                fun convertBooleanPrefToTriState(key: String): Int {
+                    val oldPrefValue = prefs.getBoolean(key, false)
+                    return if (oldPrefValue) ExtendedNavigationView.Item.TriStateGroup.State.INCLUDE.value
+                    else ExtendedNavigationView.Item.TriStateGroup.State.IGNORE.value
+                }
+                prefs.edit {
+                    putInt(PreferenceKeys.filterDownloaded, convertBooleanPrefToTriState("pref_filter_downloaded_key"))
+                    remove("pref_filter_downloaded_key")
+
+                    putInt(PreferenceKeys.filterUnread, convertBooleanPrefToTriState("pref_filter_unread_key"))
+                    remove("pref_filter_unread_key")
+
+                    putInt(PreferenceKeys.filterCompleted, convertBooleanPrefToTriState("pref_filter_completed_key"))
+                    remove("pref_filter_completed_key")
+                }
+            }
+            if (oldVersion < 54) {
+                // Force MAL log out due to login flow change
+                // v52: switched from scraping to WebView
+                // v53: switched from WebView to OAuth
+                val trackManager = Injekt.get<TrackManager>()
+                if (trackManager.myAnimeList.isLogged) {
+                    trackManager.myAnimeList.logout()
+                    context.toast(R.string.myanimelist_relogin)
+                }
+            }
+            if (oldVersion < 57) {
+                // Migrate DNS over HTTPS setting
+                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+                val wasDohEnabled = prefs.getBoolean("enable_doh", false)
+                if (wasDohEnabled) {
+                    prefs.edit {
+                        putInt(PreferenceKeys.dohProvider, PREF_DOH_CLOUDFLARE)
+                        remove("enable_doh")
+                    }
+                }
+            }
+            if (oldVersion < 59) {
+                // Reset rotation to Free after replacing Lock
+                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+                if (prefs.contains("pref_rotation_type_key")) {
+                    prefs.edit {
+                        putInt("pref_rotation_type_key", 1)
+                    }
+                }
+
+                // Disable update check for Android 5.x users
+                if (BuildConfig.INCLUDE_UPDATER && Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+                    UpdaterJob.cancelTask(context)
+                }
+            }
+            if (oldVersion < 60) {
+                // Re-enable update check that was prevously accidentally disabled for M
+                if (BuildConfig.INCLUDE_UPDATER && Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
+                    UpdaterJob.setupTask(context)
+                }
+
+                // Migrate Rotation and Viewer values to default values for viewer_flags
+                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+                val newOrientation = when (prefs.getInt("pref_rotation_type_key", 1)) {
+                    1 -> OrientationType.FREE.flagValue
+                    2 -> OrientationType.PORTRAIT.flagValue
+                    3 -> OrientationType.LANDSCAPE.flagValue
+                    4 -> OrientationType.LOCKED_PORTRAIT.flagValue
+                    5 -> OrientationType.LOCKED_LANDSCAPE.flagValue
+                    else -> OrientationType.FREE.flagValue
+                }
+
+                // Reading mode flag and prefValue is the same value
+                val newReadingMode = prefs.getInt("pref_default_viewer_key", 1)
+
+                prefs.edit {
+                    putInt("pref_default_orientation_type_key", newOrientation)
+                    remove("pref_rotation_type_key")
+                    putInt("pref_default_reading_mode_key", newReadingMode)
+                    remove("pref_default_viewer_key")
+                }
+            }
+            if (oldVersion < 61) {
+                // Handle removed every 1 or 2 hour library updates
+                val updateInterval = preferences.libraryUpdateInterval().get()
+                if (updateInterval == 1 || updateInterval == 2) {
+                    preferences.libraryUpdateInterval().set(3)
+                    LibraryUpdateJob.setupTask(context, 3)
+                }
+            }
             return true
         }
+
         return false
     }
 }

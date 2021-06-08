@@ -13,19 +13,17 @@ import uy.kohesive.injekt.api.get
 
 class ExtensionFilterController : SettingsController() {
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) = with(screen) {
-        titleRes = R.string.action_filter
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+        titleRes = R.string.label_extensions
 
         val activeLangs = preferences.enabledLanguages().get()
 
         val availableLangs =
             Injekt.get<ExtensionManager>().availableExtensions.groupBy {
                 it.lang
-            }.keys.minus("all").partition {
-                it in activeLangs
-            }.let {
-                it.first + it.second
-            }
+            }.keys
+                .minus("all")
+                .sortedWith(compareBy({ it !in activeLangs }, { LocaleHelper.getSourceDisplayName(it, context) }))
 
         availableLangs.forEach {
             switchPreference {
@@ -38,11 +36,13 @@ class ExtensionFilterController : SettingsController() {
                     val checked = newValue as Boolean
                     val currentActiveLangs = preferences.enabledLanguages().get()
 
-                    if (checked) {
-                        preferences.enabledLanguages().set(currentActiveLangs + it)
-                    } else {
-                        preferences.enabledLanguages().set(currentActiveLangs - it)
-                    }
+                    preferences.enabledLanguages().set(
+                        if (checked) {
+                            currentActiveLangs + it
+                        } else {
+                            currentActiveLangs - it
+                        }
+                    )
                     true
                 }
             }

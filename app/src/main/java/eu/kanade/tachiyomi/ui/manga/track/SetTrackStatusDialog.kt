@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.manga.track
 
 import android.app.Dialog
 import android.os.Bundle
+import androidx.core.os.bundleOf
 import com.afollestad.materialdialogs.MaterialDialog
 import com.afollestad.materialdialogs.list.listItemsSingleChoice
 import com.bluelinelabs.conductor.Controller
@@ -13,16 +14,17 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class SetTrackStatusDialog<T> : DialogController
-        where T : Controller, T : SetTrackStatusDialog.Listener {
+        where T : Controller {
 
     private val item: TrackItem
 
-    constructor(target: T, item: TrackItem) : super(
-        Bundle().apply {
-            putSerializable(KEY_ITEM_TRACK, item.track)
-        }
+    private lateinit var listener: Listener
+
+    constructor(target: T, listener: Listener, item: TrackItem) : super(
+        bundleOf(KEY_ITEM_TRACK to item.track)
     ) {
         targetController = target
+        this.listener = listener
         this.item = item
     }
 
@@ -47,7 +49,7 @@ class SetTrackStatusDialog<T> : DialogController
                 initialSelection = selectedIndex,
                 waitForPositiveButton = false
             ) { dialog, position, _ ->
-                (targetController as? Listener)?.setStatus(item, position)
+                listener.setStatus(item, position)
                 dialog.dismiss()
             }
     }

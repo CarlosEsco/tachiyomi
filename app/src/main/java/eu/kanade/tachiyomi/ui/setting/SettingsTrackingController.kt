@@ -1,16 +1,20 @@
 package eu.kanade.tachiyomi.ui.setting
 
 import android.app.Activity
-import android.content.Intent
-import androidx.browser.customtabs.CustomTabsIntent
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
+import eu.kanade.tachiyomi.data.track.NoLoginTrackService
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
 import eu.kanade.tachiyomi.data.track.bangumi.BangumiApi
+import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeListApi
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
+import eu.kanade.tachiyomi.ui.setting.track.TrackLoginDialog
+import eu.kanade.tachiyomi.ui.setting.track.TrackLogoutDialog
 import eu.kanade.tachiyomi.util.preference.defaultValue
 import eu.kanade.tachiyomi.util.preference.infoPreference
 import eu.kanade.tachiyomi.util.preference.initThenAdd
@@ -18,11 +22,10 @@ import eu.kanade.tachiyomi.util.preference.onClick
 import eu.kanade.tachiyomi.util.preference.preferenceCategory
 import eu.kanade.tachiyomi.util.preference.switchPreference
 import eu.kanade.tachiyomi.util.preference.titleRes
-import eu.kanade.tachiyomi.util.system.getResourceColor
+import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.widget.preference.LoginPreference
-import eu.kanade.tachiyomi.widget.preference.TrackLoginDialog
-import eu.kanade.tachiyomi.widget.preference.TrackLogoutDialog
 import uy.kohesive.injekt.injectLazy
+import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 
 class SettingsTrackingController :
     SettingsController(),
@@ -31,7 +34,7 @@ class SettingsTrackingController :
 
     private val trackManager: TrackManager by injectLazy()
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) = with(screen) {
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = R.string.pref_category_tracking
 
         switchPreference {
@@ -39,20 +42,19 @@ class SettingsTrackingController :
             titleRes = R.string.pref_auto_update_manga_sync
             defaultValue = true
         }
+        switchPreference {
+            key = Keys.autoAddTrack
+            titleRes = R.string.pref_auto_add_track
+            defaultValue = true
+        }
         preferenceCategory {
             titleRes = R.string.services
 
             trackPreference(trackManager.myAnimeList) {
-                val dialog = TrackLoginDialog(trackManager.myAnimeList)
-                dialog.targetController = this@SettingsTrackingController
-                dialog.showDialog(router)
+                activity?.openInBrowser(MyAnimeListApi.authUrl(), trackManager.myAnimeList.getLogoColor())
             }
             trackPreference(trackManager.aniList) {
-                val tabsIntent = CustomTabsIntent.Builder()
-                    .setToolbarColor(context.getResourceColor(R.attr.colorPrimary))
-                    .build()
-                tabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
-                tabsIntent.launchUrl(activity!!, AnilistApi.authUrl())
+                activity?.openInBrowser(AnilistApi.authUrl(), trackManager.aniList.getLogoColor())
             }
             trackPreference(trackManager.kitsu) {
                 val dialog = TrackLoginDialog(trackManager.kitsu, R.string.email)
@@ -60,18 +62,14 @@ class SettingsTrackingController :
                 dialog.showDialog(router)
             }
             trackPreference(trackManager.shikimori) {
-                val tabsIntent = CustomTabsIntent.Builder()
-                    .setToolbarColor(context.getResourceColor(R.attr.colorPrimary))
-                    .build()
-                tabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
-                tabsIntent.launchUrl(activity!!, ShikimoriApi.authUrl())
+                activity?.openInBrowser(ShikimoriApi.authUrl(), trackManager.shikimori.getLogoColor())
             }
             trackPreference(trackManager.bangumi) {
-                val tabsIntent = CustomTabsIntent.Builder()
-                    .setToolbarColor(context.getResourceColor(R.attr.colorPrimary))
-                    .build()
-                tabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
-                tabsIntent.launchUrl(activity!!, BangumiApi.authUrl())
+                activity?.openInBrowser(BangumiApi.authUrl(), trackManager.bangumi.getLogoColor())
+            }
+            trackPreference(trackManager.komga) {
+                trackManager.komga.loginNoop()
+                updatePreference(trackManager.komga.id)
             }
         }
         preferenceCategory {
@@ -86,14 +84,19 @@ class SettingsTrackingController :
         return initThenAdd(
             LoginPreference(context).apply {
                 key = Keys.trackUsername(service.id)
-                title = service.name
+                titleRes = service.nameRes()
             },
             {
                 onClick {
                     if (service.isLogged) {
-                        val dialog = TrackLogoutDialog(service)
-                        dialog.targetController = this@SettingsTrackingController
-                        dialog.showDialog(router)
+                        if (service is NoLoginTrackService) {
+                            service.logout()
+                            updatePreference(service.id)
+                        } else {
+                            val dialog = TrackLogoutDialog(service)
+                            dialog.targetController = this@SettingsTrackingController
+                            dialog.showDialog(router)
+                        }
                     } else {
                         login()
                     }
@@ -106,9 +109,21 @@ class SettingsTrackingController :
         super.onActivityResumed(activity)
 
         // Manually refresh OAuth trackers' holders
+        updatePreference(trackManager.myAnimeList.id)
         updatePreference(trackManager.aniList.id)
         updatePreference(trackManager.shikimori.id)
         updatePreference(trackManager.bangumi.id)
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+        inflater.inflate(R.menu.settings_tracking, menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.action_tracking_help -> activity?.openInBrowser(HELP_URL)
+        }
+        return super.onOptionsItemSelected(item)
     }
 
     private fun updatePreference(id: Int) {
@@ -124,3 +139,5 @@ class SettingsTrackingController :
         updatePreference(service.id)
     }
 }
+
+private const val HELP_URL = "https://tachiyomi.org/help/guides/tracking/"

@@ -4,11 +4,12 @@ import android.app.Notification
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.net.NetworkInfo.State.CONNECTED
 import android.net.NetworkInfo.State.DISCONNECTED
-import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import com.github.pwittchen.reactivenetwork.library.Connectivity
 import com.github.pwittchen.reactivenetwork.library.ReactiveNetwork
 import com.jakewharton.rxrelay.BehaviorRelay
@@ -46,11 +47,7 @@ class DownloadService : Service() {
          */
         fun start(context: Context) {
             val intent = Intent(context, DownloadService::class.java)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                context.startService(intent)
-            } else {
-                context.startForegroundService(intent)
-            }
+            ContextCompat.startForegroundService(context, intent)
         }
 
         /**
@@ -82,7 +79,7 @@ class DownloadService : Service() {
      */
     override fun onCreate() {
         super.onCreate()
-        startForeground(Notifications.ID_DOWNLOAD_CHAPTER, getPlaceholderNotification())
+        startForeground(Notifications.ID_DOWNLOAD_CHAPTER_PROGRESS, getPlaceholderNotification())
         wakeLock = acquireWakeLock(javaClass.name)
         runningRelay.call(true)
         subscriptions = CompositeSubscription()
@@ -143,7 +140,7 @@ class DownloadService : Service() {
     private fun onNetworkStateChanged(connectivity: Connectivity) {
         when (connectivity.state) {
             CONNECTED -> {
-                if (preferences.downloadOnlyOverWifi() && connectivityManager.isActiveNetworkMetered) {
+                if (preferences.downloadOnlyOverWifi() && connectivityManager.activeNetworkInfo?.type != ConnectivityManager.TYPE_WIFI) {
                     downloadManager.stopDownloads(getString(R.string.download_notifier_text_only_wifi))
                 } else {
                     val started = downloadManager.startDownloads()
@@ -175,19 +172,19 @@ class DownloadService : Service() {
     /**
      * Releases the wake lock if it's held.
      */
-    fun PowerManager.WakeLock.releaseIfNeeded() {
+    private fun PowerManager.WakeLock.releaseIfNeeded() {
         if (isHeld) release()
     }
 
     /**
      * Acquires the wake lock if it's not held.
      */
-    fun PowerManager.WakeLock.acquireIfNeeded() {
+    private fun PowerManager.WakeLock.acquireIfNeeded() {
         if (!isHeld) acquire()
     }
 
     private fun getPlaceholderNotification(): Notification {
-        return notification(Notifications.CHANNEL_DOWNLOADER) {
+        return notification(Notifications.CHANNEL_DOWNLOADER_PROGRESS) {
             setContentTitle(getString(R.string.download_notifier_downloader_title))
         }
     }

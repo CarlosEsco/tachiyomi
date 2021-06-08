@@ -4,9 +4,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -20,9 +20,9 @@ import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.storage.saveTo
 import eu.kanade.tachiyomi.util.system.acquireWakeLock
 import eu.kanade.tachiyomi.util.system.isServiceRunning
-import java.io.File
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
+import java.io.File
 
 class UpdaterService : Service() {
 
@@ -152,11 +152,7 @@ class UpdaterService : Service() {
                     putExtra(EXTRA_DOWNLOAD_TITLE, title)
                     putExtra(EXTRA_DOWNLOAD_URL, url)
                 }
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                    context.startService(intent)
-                } else {
-                    context.startForegroundService(intent)
-                }
+                ContextCompat.startForegroundService(context, intent)
             }
         }
 

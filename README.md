@@ -1,17 +1,17 @@
 | Build | Stable | Weekly Preview | Contribute | Support Server |
 |-------|----------|---------|------------|---------|
-| [![Travis](https://img.shields.io/travis/inorichi/tachiyomi.svg)](https://travis-ci.org/inorichi/tachiyomi) | [![stable release](https://img.shields.io/github/release/inorichi/tachiyomi.svg?maxAge=3600&label=download)](https://github.com/inorichi/tachiyomi/releases) | [![latest weekly build](https://img.shields.io/badge/download-latest%20build-blue.svg)](http://tachiyomi.kanade.eu/latest) | [![Translation status](https://hosted.weblate.org/widgets/tachiyomi/-/svg-badge.svg)](https://hosted.weblate.org/engage/tachiyomi/?utm_source=widget) | [![Discord](https://img.shields.io/discord/349436576037732353.svg)](https://discord.gg/tachiyomi) |
+| ![CI](https://github.com/tachiyomiorg/tachiyomi/workflows/CI/badge.svg?branch=dev&event=push) | [![stable release](https://img.shields.io/github/release/tachiyomiorg/tachiyomi.svg?maxAge=3600&label=download)](https://github.com/tachiyomiorg/tachiyomi/releases) | [![latest weekly build](https://img.shields.io/github/v/release/tachiyomiorg/tachiyomi-preview.svg?maxAge=3600&label=download)](https://github.com/tachiyomiorg/tachiyomi-preview/releases) | [![Translation status](https://hosted.weblate.org/widgets/tachiyomi/-/svg-badge.svg)](https://hosted.weblate.org/engage/tachiyomi/?utm_source=widget) | [![Discord](https://img.shields.io/discord/349436576037732353.svg?label=discord&labelColor=7289da&color=2c2f33&style=flat)](https://discord.gg/tachiyomi) |
 
 
 # ![app icon](./.github/readme-images/app-icon.png)Tachiyomi
-Tachiyomi is a free and open source manga reader for Android 5.0 and above.
+Tachiyomi is a free and open source manga reader for Android 6.0 and above.
 
 ![screenshots of app](./.github/readme-images/screens.png)
 
 ## Features
 
 Features include:
-* Online reading from sources such as MangaDex, MangaSee, Mangakakalot, [and more](https://github.com/inorichi/tachiyomi-extensions)
+* Online reading from [a variety of sources](https://github.com/tachiyomiorg/tachiyomi-extensions)
 * Local reading of downloaded manga
 * A configurable reader with multiple viewers, reading directions and other settings.
 * [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.io/), [Shikimori](https://shikimori.one), and [Bangumi](https://bgm.tv/) support
@@ -21,9 +21,9 @@ Features include:
 * Create backups locally to read offline or to your desired cloud service
 
 ## Download
-Get the app from our [releases page](https://github.com/inorichi/tachiyomi/releases).
+Get the app from our [releases page](https://github.com/tachiyomiorg/tachiyomi/releases).
 
-If you want to try new features before they get to the stable release, you can download the preview version [here](http://tachiyomi.kanade.eu/latest).
+If you want to try new features before they get to the stable release, you can download the preview version [here](https://github.com/tachiyomiorg/android-app-preview/releases).
 
 ## Issues, Feature Requests and Contributing
 
@@ -31,14 +31,14 @@ Please make sure to read the full guidelines. Your issue may be closed without w
 
 <details><summary>Issues</summary>
 
-1. **Before reporting a new issue, take a look at the [FAQ](https://github.com/inorichi/tachiyomi/wiki/FAQ), the [changelog](https://github.com/inorichi/tachiyomi/releases) and the already opened [issues](https://github.com/inorichi/tachiyomi/issues).**
+1. **Before reporting a new issue, take a look at the [FAQ](https://tachiyomi.org/help/faq/), the [changelog](https://github.com/tachiyomiorg/tachiyomi/releases) and the already opened [issues](https://github.com/tachiyomiorg/tachiyomi/issues).**
 2. If you are unsure, ask here: [![Discord](https://img.shields.io/discord/349436576037732353.svg)](https://discord.gg/tachiyomi)
 
 </details>
 
 <details><summary>Bugs</summary>
 
-* Include version (Setting > About > Version)
+* Include version (More > About > Version)
  * If not latest, try updating, it may have already been solved
  * Preview version is equal to the number of commits as seen in the main page
 * Include steps to reproduce (if not obvious from description)
@@ -47,9 +47,9 @@ Please make sure to read the full guidelines. Your issue may be closed without w
 * For large logs use http://pastebin.com/ (or similar)
 * Don't group unrelated requests into one issue
 
-DO: https://github.com/inorichi/tachiyomi/issues/24 https://github.com/inorichi/tachiyomi/issues/71
+DO: https://github.com/tachiyomiorg/tachiyomi/issues/24 https://github.com/tachiyomiorg/tachiyomi/issues/71
 
-DON'T: https://github.com/inorichi/tachiyomi/issues/75
+DON'T: https://github.com/tachiyomiorg/tachiyomi/issues/75
 
 </details>
 
@@ -58,7 +58,17 @@ DON'T: https://github.com/inorichi/tachiyomi/issues/75
 * Write a detailed issue, explaining what it should do or how. Avoid writing just "like X app does"
 * Include screenshot (if needed)
 
-Catalogue requests should be created at https://github.com/inorichi/tachiyomi-extensions, they do not belong in this repository.
+Source requests should be created at https://github.com/tachiyomiorg/tachiyomi-extensions, they do not belong in this repository.
+</details>
+
+<details><summary>Contributing</summary>
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+</details>
+
+<details><summary>Code of Conduct</summary>
+
+See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 </details>
 
 ## FAQ

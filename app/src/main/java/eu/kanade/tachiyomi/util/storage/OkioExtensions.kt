@@ -1,10 +1,10 @@
 package eu.kanade.tachiyomi.util.storage
 
-import java.io.File
-import java.io.OutputStream
 import okio.BufferedSource
 import okio.buffer
 import okio.sink
+import java.io.File
+import java.io.OutputStream
 
 /**
  * Saves the given source to a file and closes it. Directories will be created if needed.
@@ -14,7 +14,7 @@ import okio.sink
 fun BufferedSource.saveTo(file: File) {
     try {
         // Create parent dirs if needed
-        file.parentFile.mkdirs()
+        file.parentFile?.mkdirs()
 
         // Copy to destination
         saveTo(file.outputStream())

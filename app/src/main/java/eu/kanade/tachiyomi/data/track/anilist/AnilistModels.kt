@@ -4,9 +4,9 @@ import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
-import uy.kohesive.injekt.injectLazy
 
 data class ALManga(
     val media_id: Int,
@@ -44,6 +44,8 @@ data class ALUserManga(
     val list_status: String,
     val score_raw: Int,
     val chapters_read: Int,
+    val start_date_fuzzy: Long,
+    val completed_date_fuzzy: Long,
     val manga: ALManga
 ) {
 
@@ -51,6 +53,8 @@ data class ALUserManga(
         media_id = manga.media_id
         status = toTrackStatus()
         score = score_raw.toFloat()
+        started_reading_date = start_date_fuzzy
+        finished_reading_date = completed_date_fuzzy
         last_chapter_read = chapters_read
         library_id = this@ALUserManga.library_id
         total_chapters = manga.total_chapters
@@ -63,7 +67,7 @@ data class ALUserManga(
         "DROPPED" -> Anilist.DROPPED
         "PLANNING" -> Anilist.PLANNING
         "REPEATING" -> Anilist.REPEATING
-        else -> throw NotImplementedError("Unknown status")
+        else -> throw NotImplementedError("Unknown status: $list_status")
     }
 }
 
@@ -74,7 +78,7 @@ fun Track.toAnilistStatus() = when (status) {
     Anilist.DROPPED -> "DROPPED"
     Anilist.PLANNING -> "PLANNING"
     Anilist.REPEATING -> "REPEATING"
-    else -> throw NotImplementedError("Unknown status")
+    else -> throw NotImplementedError("Unknown status: $status")
 }
 
 private val preferences: PreferencesHelper by injectLazy()
@@ -102,5 +106,5 @@ fun Track.toAnilistScore(): String = when (preferences.anilistScoreType().get())
     }
 // 10 point decimal
     "POINT_10_DECIMAL" -> (score / 10).toString()
-    else -> throw Exception("Unknown score type")
+    else -> throw NotImplementedError("Unknown score type")
 }

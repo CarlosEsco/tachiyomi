@@ -2,17 +2,31 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerConfig
+import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.EdgeNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.KindlishNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.LNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.RightAndLeftNavigation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 /**
  * Configuration used by pager viewers.
  */
-class PagerConfig(private val viewer: PagerViewer, preferences: PreferencesHelper = Injekt.get()) :
-    ViewerConfig(preferences) {
+class PagerConfig(
+    private val viewer: PagerViewer,
+    scope: CoroutineScope,
+    preferences: PreferencesHelper = Injekt.get()
+) : ViewerConfig(preferences, scope) {
 
-    var usePageTransitions = false
+    var automaticBackground = false
         private set
+
+    var dualPageSplitChangedListener: ((Boolean) -> Unit)? = null
 
     var imageScaleType = 1
         private set
@@ -24,8 +38,8 @@ class PagerConfig(private val viewer: PagerViewer, preferences: PreferencesHelpe
         private set
 
     init {
-        preferences.pageTransitions()
-            .register({ usePageTransitions = it })
+        preferences.readerTheme()
+            .register({ automaticBackground = it == 3 }, { imagePropertyChangedListener?.invoke() })
 
         preferences.imageScaleType()
             .register({ imageScaleType = it }, { imagePropertyChangedListener?.invoke() })
@@ -35,6 +49,28 @@ class PagerConfig(private val viewer: PagerViewer, preferences: PreferencesHelpe
 
         preferences.cropBorders()
             .register({ imageCropBorders = it }, { imagePropertyChangedListener?.invoke() })
+
+        preferences.navigationModePager()
+            .register({ navigationMode = it }, { updateNavigation(navigationMode) })
+
+        preferences.pagerNavInverted()
+            .register({ tappingInverted = it }, { navigator.invertMode = it })
+        preferences.pagerNavInverted().asFlow()
+            .drop(1)
+            .onEach { navigationModeChangedListener?.invoke() }
+            .launchIn(scope)
+
+        preferences.dualPageSplitPaged()
+            .register(
+                { dualPageSplit = it },
+                {
+                    imagePropertyChangedListener?.invoke()
+                    dualPageSplitChangedListener?.invoke(it)
+                }
+            )
+
+        preferences.dualPageInvertPaged()
+            .register({ dualPageInvert = it }, { imagePropertyChangedListener?.invoke() })
     }
 
     private fun zoomTypeFromPreference(value: Int) {
@@ -52,6 +88,30 @@ class PagerConfig(private val viewer: PagerViewer, preferences: PreferencesHelpe
             // Center
             else -> ZoomType.Center
         }
+    }
+
+    override var navigator: ViewerNavigation = defaultNavigation()
+        set(value) {
+            field = value.also { it.invertMode = this.tappingInverted }
+        }
+
+    override fun defaultNavigation(): ViewerNavigation {
+        return when (viewer) {
+            is VerticalPagerViewer -> LNavigation()
+            else -> RightAndLeftNavigation()
+        }
+    }
+
+    override fun updateNavigation(navigationMode: Int) {
+        navigator = when (navigationMode) {
+            0 -> defaultNavigation()
+            1 -> LNavigation()
+            2 -> KindlishNavigation()
+            3 -> EdgeNavigation()
+            4 -> RightAndLeftNavigation()
+            else -> defaultNavigation()
+        }
+        navigationModeChangedListener?.invoke()
     }
 
     enum class ZoomType {

@@ -4,25 +4,16 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import com.bumptech.glide.load.engine.DiskCacheStrategy
+import androidx.core.view.isVisible
+import coil.clear
+import coil.load
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.glide.GlideApp
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
-import eu.kanade.tachiyomi.util.view.gone
+import eu.kanade.tachiyomi.databinding.TrackSearchItemBinding
 import eu.kanade.tachiyomi.util.view.inflate
-import java.util.ArrayList
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_cover
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_start
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_start_result
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_status
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_status_result
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_summary
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_title
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_type
-import kotlinx.android.synthetic.main.track_search_item.view.track_search_type_result
 
 class TrackSearchAdapter(context: Context) :
-    ArrayAdapter<TrackSearch>(context, R.layout.track_search_item, ArrayList<TrackSearch>()) {
+    ArrayAdapter<TrackSearch>(context, R.layout.track_search_item, mutableListOf<TrackSearch>()) {
 
     override fun getView(position: Int, view: View?, parent: ViewGroup): View {
         var v = view
@@ -50,37 +41,35 @@ class TrackSearchAdapter(context: Context) :
 
     class TrackSearchHolder(private val view: View) {
 
+        private val binding = TrackSearchItemBinding.bind(view)
+
         fun onSetValues(track: TrackSearch) {
-            view.track_search_title.text = track.title
-            view.track_search_summary.text = track.summary
-            GlideApp.with(view.context).clear(view.track_search_cover)
-            if (!track.cover_url.isEmpty()) {
-                GlideApp.with(view.context)
-                    .load(track.cover_url)
-                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
-                    .centerCrop()
-                    .into(view.track_search_cover)
+            binding.trackSearchTitle.text = track.title
+            binding.trackSearchSummary.text = track.summary
+            binding.trackSearchCover.clear()
+            if (track.cover_url.isNotEmpty()) {
+                binding.trackSearchCover.load(track.cover_url)
             }
 
-            if (track.publishing_status.isBlank()) {
-                view.track_search_status.gone()
-                view.track_search_status_result.gone()
-            } else {
-                view.track_search_status_result.text = track.publishing_status.capitalize()
+            val hasStatus = track.publishing_status.isNotBlank()
+            binding.trackSearchStatus.isVisible = hasStatus
+            binding.trackSearchStatusResult.isVisible = hasStatus
+            if (hasStatus) {
+                binding.trackSearchStatusResult.text = track.publishing_status.capitalize()
             }
 
-            if (track.publishing_type.isBlank()) {
-                view.track_search_type.gone()
-                view.track_search_type_result.gone()
-            } else {
-                view.track_search_type_result.text = track.publishing_type.capitalize()
+            val hasType = track.publishing_type.isNotBlank()
+            binding.trackSearchType.isVisible = hasType
+            binding.trackSearchTypeResult.isVisible = hasType
+            if (hasType) {
+                binding.trackSearchTypeResult.text = track.publishing_type.capitalize()
             }
 
-            if (track.start_date.isBlank()) {
-                view.track_search_start.gone()
-                view.track_search_start_result.gone()
-            } else {
-                view.track_search_start_result.text = track.start_date
+            val hasStartDate = track.start_date.isNotBlank()
+            binding.trackSearchStart.isVisible = hasStartDate
+            binding.trackSearchStartResult.isVisible = hasStartDate
+            if (hasStartDate) {
+                binding.trackSearchStartResult.text = track.start_date
             }
         }
     }

@@ -12,7 +12,6 @@ import eu.kanade.tachiyomi.data.database.resolvers.MangaFavoritePutResolver
 import eu.kanade.tachiyomi.data.database.resolvers.MangaFlagsPutResolver
 import eu.kanade.tachiyomi.data.database.resolvers.MangaLastUpdatedPutResolver
 import eu.kanade.tachiyomi.data.database.resolvers.MangaTitlePutResolver
-import eu.kanade.tachiyomi.data.database.resolvers.MangaViewerPutResolver
 import eu.kanade.tachiyomi.data.database.tables.CategoryTable
 import eu.kanade.tachiyomi.data.database.tables.ChapterTable
 import eu.kanade.tachiyomi.data.database.tables.MangaCategoryTable
@@ -78,9 +77,24 @@ interface MangaQueries : DbProvider {
 
     fun insertMangas(mangas: List<Manga>) = db.put().objects(mangas).prepare()
 
-    fun updateFlags(manga: Manga) = db.put()
+    fun updateChapterFlags(manga: Manga) = db.put()
         .`object`(manga)
-        .withPutResolver(MangaFlagsPutResolver())
+        .withPutResolver(MangaFlagsPutResolver(MangaTable.COL_CHAPTER_FLAGS, Manga::chapter_flags))
+        .prepare()
+
+    fun updateChapterFlags(manga: List<Manga>) = db.put()
+        .objects(manga)
+        .withPutResolver(MangaFlagsPutResolver(MangaTable.COL_CHAPTER_FLAGS, Manga::chapter_flags, true))
+        .prepare()
+
+    fun updateViewerFlags(manga: Manga) = db.put()
+        .`object`(manga)
+        .withPutResolver(MangaFlagsPutResolver(MangaTable.COL_VIEWER, Manga::viewer_flags))
+        .prepare()
+
+    fun updateViewerFlags(manga: List<Manga>) = db.put()
+        .objects(manga)
+        .withPutResolver(MangaFlagsPutResolver(MangaTable.COL_VIEWER, Manga::viewer_flags, true))
         .prepare()
 
     fun updateLastUpdated(manga: Manga) = db.put()
@@ -91,11 +105,6 @@ interface MangaQueries : DbProvider {
     fun updateMangaFavorite(manga: Manga) = db.put()
         .`object`(manga)
         .withPutResolver(MangaFavoritePutResolver())
-        .prepare()
-
-    fun updateMangaViewer(manga: Manga) = db.put()
-        .`object`(manga)
-        .withPutResolver(MangaViewerPutResolver())
         .prepare()
 
     fun updateMangaTitle(manga: Manga) = db.put()
@@ -155,6 +164,16 @@ interface MangaQueries : DbProvider {
         .withQuery(
             RawQuery.builder()
                 .query(getLatestChapterMangaQuery())
+                .observesTables(MangaTable.TABLE)
+                .build()
+        )
+        .prepare()
+
+    fun getChapterFetchDateManga() = db.get()
+        .listOfObjects(Manga::class.java)
+        .withQuery(
+            RawQuery.builder()
+                .query(getChapterFetchDateMangaQuery())
                 .observesTables(MangaTable.TABLE)
                 .build()
         )

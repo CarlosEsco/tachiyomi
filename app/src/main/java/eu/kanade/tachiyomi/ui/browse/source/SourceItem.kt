@@ -14,7 +14,11 @@ import eu.kanade.tachiyomi.source.CatalogueSource
  * @param source Instance of [CatalogueSource] containing source information.
  * @param header The header for this item.
  */
-data class SourceItem(val source: CatalogueSource, val header: LangItem? = null) :
+data class SourceItem(
+    val source: CatalogueSource,
+    val header: LangItem? = null,
+    val isPinned: Boolean = false
+) :
     AbstractSectionableItem<SourceHolder, LangItem>(header) {
 
     /**
@@ -41,5 +45,21 @@ data class SourceItem(val source: CatalogueSource, val header: LangItem? = null)
         payloads: MutableList<Any>
     ) {
         holder.bind(this)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (other is SourceItem) {
+            return source.id == other.source.id &&
+                getHeader()?.code == other.getHeader()?.code &&
+                isPinned == other.isPinned
+        }
+        return false
+    }
+
+    override fun hashCode(): Int {
+        var result = source.id.hashCode()
+        result = 31 * result + (header?.hashCode() ?: 0)
+        result = 31 * result + isPinned.hashCode()
+        return result
     }
 }

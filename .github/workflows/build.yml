@@ -1,0 +1,96 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+  pull_request:
+
+jobs:
+  check_wrapper:
+    name: Validate Gradle Wrapper
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+  build:
+    name: Build app
+    needs: check_wrapper
+    if: "!startsWith(github.event.head_commit.message, '[SKIP CI]')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cancel previous runs
+        uses: styfle/cancel-workflow-action@0.5.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: 11
+
+      - name: Copy CI gradle.properties
+        run: |
+          mkdir -p ~/.gradle
+          cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
+
+      - name: Build app
+        uses: eskatos/gradle-command-action@v1
+        with:
+          arguments: assembleStandardRelease
+          wrapper-cache-enabled: true
+          dependencies-cache-enabled: true
+          configuration-cache-enabled: true
+
+      # Sign APK and create release for tags
+
+      - name: Get tag name
+        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'tachiyomiorg/tachiyomi'
+        id: get_tag_name
+        run: |
+          set -x
+          echo "VERSION_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+
+      # TODO: need to support multiple APKs
+
+      - name: Sign APK
+        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'tachiyomiorg/tachiyomi'
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/standard/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Clean up build artifacts
+        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'tachiyomiorg/tachiyomi'
+        run: |
+          cp ${{ env.SIGNED_RELEASE_FILE }} tachiyomi-${{ env.VERSION_TAG }}.apk
+          md5=`md5sum tachiyomi-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          echo "APK_MD5=$md5" >> $GITHUB_ENV
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'tachiyomiorg/tachiyomi'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.VERSION_TAG }}
+          name: Tachiyomi ${{ env.VERSION_TAG }}
+          body: |
+            MD5: ${{ env.APK_MD5 }}
+          files: |
+            tachiyomi-${{ env.VERSION_TAG }}.apk
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

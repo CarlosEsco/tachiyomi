@@ -3,9 +3,12 @@ package eu.kanade.tachiyomi.util.chapter
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.util.Date
 import java.util.TreeSet
 
@@ -25,19 +28,23 @@ fun syncChaptersWithSource(
     source: Source
 ): Pair<List<Chapter>, List<Chapter>> {
     if (rawSourceChapters.isEmpty()) {
-        throw Exception("No chapters found")
+        throw NoChaptersException()
     }
+
+    val downloadManager: DownloadManager = Injekt.get()
 
     // Chapters from db.
     val dbChapters = db.getChapters(manga).executeAsBlocking()
 
-    val sourceChapters = rawSourceChapters.mapIndexed { i, sChapter ->
-        Chapter.create().apply {
-            copyFrom(sChapter)
-            manga_id = manga.id
-            source_order = i
+    val sourceChapters = rawSourceChapters
+        .distinctBy { it.url }
+        .mapIndexed { i, sChapter ->
+            Chapter.create().apply {
+                copyFrom(sChapter)
+                manga_id = manga.id
+                source_order = i
+            }
         }
-    }
 
     // Chapters from the source not in db.
     val toAdd = mutableListOf<Chapter>()
@@ -60,6 +67,9 @@ fun syncChaptersWithSource(
             ChapterRecognition.parseChapterNumber(sourceChapter, manga)
 
             if (shouldUpdateDbChapter(dbChapter, sourceChapter)) {
+                if (dbChapter.name != sourceChapter.name && downloadManager.isChapterDownloaded(dbChapter, manga)) {
+                    downloadManager.renameChapter(source, manga, dbChapter, sourceChapter)
+                }
                 dbChapter.scanlator = sourceChapter.scanlator
                 dbChapter.name = sourceChapter.name
                 dbChapter.date_upload = sourceChapter.date_upload
@@ -147,3 +157,5 @@ private fun shouldUpdateDbChapter(dbChapter: Chapter, sourceChapter: SChapter): 
         dbChapter.date_upload != sourceChapter.date_upload ||
         dbChapter.chapter_number != sourceChapter.chapter_number
 }
+
+class NoChaptersException : Exception()

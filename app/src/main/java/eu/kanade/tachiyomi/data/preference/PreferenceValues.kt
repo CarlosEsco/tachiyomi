@@ -1,18 +1,51 @@
 package eu.kanade.tachiyomi.data.preference
 
+const val UNMETERED_NETWORK = "wifi"
+const val CHARGING = "ac"
+
 /**
  * This class stores the values for the preferences in the application.
  */
 object PreferenceValues {
 
-    const val THEME_MODE_LIGHT = "light"
-    const val THEME_MODE_DARK = "dark"
-    const val THEME_MODE_SYSTEM = "system"
+    /* ktlint-disable experimental:enum-entry-name-case */
 
-    const val THEME_LIGHT_DEFAULT = "default"
-    const val THEME_LIGHT_BLUE = "blue"
+    // Keys are lowercase to match legacy string values
+    enum class ThemeMode {
+        light,
+        dark,
+        system,
+    }
 
-    const val THEME_DARK_DEFAULT = "default"
-    const val THEME_DARK_BLUE = "blue"
-    const val THEME_DARK_AMOLED = "amoled"
+    // Keys are lowercase to match legacy string values
+    enum class LightThemeVariant {
+        default,
+        blue,
+        strawberrydaiquiri,
+    }
+
+    // Keys are lowercase to match legacy string values
+    enum class DarkThemeVariant {
+        default,
+        blue,
+        greenapple,
+        midnightdusk,
+        amoled,
+        hotpink,
+    }
+
+    /* ktlint-enable experimental:enum-entry-name-case */
+
+    enum class DisplayMode {
+        COMPACT_GRID,
+        COMFORTABLE_GRID,
+        LIST,
+    }
+
+    enum class TappingInvertMode(val shouldInvertHorizontal: Boolean = false, val shouldInvertVertical: Boolean = false) {
+        NONE,
+        HORIZONTAL(shouldInvertHorizontal = true),
+        VERTICAL(shouldInvertVertical = true),
+        BOTH(shouldInvertHorizontal = true, shouldInvertVertical = true)
+    }
 }

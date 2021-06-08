@@ -1,26 +1,34 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
+import android.graphics.PointF
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
 import androidx.viewpager.widget.ViewPager
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
+import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
-import eu.kanade.tachiyomi.util.view.gone
-import eu.kanade.tachiyomi.util.view.visible
+import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import timber.log.Timber
+import kotlin.math.min
 
 /**
  * Implementation of a [BaseViewer] to display pages with a [ViewPager].
  */
 @Suppress("LeakingThis")
 abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
+
+    private val scope = MainScope()
 
     /**
      * View pager used by this viewer. It's abstract to implement L2R, R2L and vertical pagers on
@@ -31,7 +39,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
     /**
      * Configuration used by the pager, like allow taps, scale mode on images, page transitions...
      */
-    val config = PagerConfig(this)
+    val config = PagerConfig(this, scope)
 
     /**
      * Adapter of the pager.
@@ -65,26 +73,36 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
         }
 
     init {
-        pager.gone() // Don't layout the pager yet
+        pager.isVisible = false // Don't layout the pager yet
         pager.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         pager.offscreenPageLimit = 1
         pager.id = R.id.reader_pager
         pager.adapter = adapter
-        pager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
-            override fun onPageSelected(position: Int) {
-                onPageChange(position)
+        pager.addOnPageChangeListener(
+            object : ViewPager.SimpleOnPageChangeListener() {
+                override fun onPageSelected(position: Int) {
+                    onPageChange(position)
+                }
+
+                override fun onPageScrollStateChanged(state: Int) {
+                    isIdle = state == ViewPager.SCROLL_STATE_IDLE
+                }
+            }
+        )
+        pager.tapListener = f@{ event ->
+            if (!config.tappingEnabled) {
+                activity.toggleMenu()
+                return@f
             }
 
-            override fun onPageScrollStateChanged(state: Int) {
-                isIdle = state == ViewPager.SCROLL_STATE_IDLE
-            }
-        })
-        pager.tapListener = { event ->
-            val positionX = event.x
-            when {
-                positionX < pager.width * 0.33f -> if (config.tappingEnabled) moveLeft() else activity.toggleMenu()
-                positionX > pager.width * 0.66f -> if (config.tappingEnabled) moveRight() else activity.toggleMenu()
-                else -> activity.toggleMenu()
+            val pos = PointF(event.rawX / pager.width, event.rawY / pager.height)
+            val navigator = config.navigator
+            when (navigator.getAction(pos)) {
+                NavigationRegion.MENU -> activity.toggleMenu()
+                NavigationRegion.NEXT -> moveToNext()
+                NavigationRegion.PREV -> moveToPrevious()
+                NavigationRegion.RIGHT -> moveRight()
+                NavigationRegion.LEFT -> moveLeft()
             }
         }
         pager.longTapListener = f@{
@@ -98,9 +116,25 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
             false
         }
 
+        config.dualPageSplitChangedListener = { enabled ->
+            if (!enabled) {
+                cleanupPageSplit()
+            }
+        }
+
         config.imagePropertyChangedListener = {
             refreshAdapter()
         }
+
+        config.navigationModeChangedListener = {
+            val showOnStart = config.navigationOverlayOnStart || config.forceNavigationOverlay
+            activity.binding.navigationOverlay.setNavigation(config.navigator, showOnStart)
+        }
+    }
+
+    override fun destroy() {
+        super.destroy()
+        scope.cancel()
     }
 
     /**
@@ -154,9 +188,14 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
      * activity of the change and requests the preload of the next chapter if this is the last page.
      */
     private fun onReaderPageSelected(page: ReaderPage, allowPreload: Boolean) {
-        val pages = page.chapter.pages!! // Won't be null because it's the loaded chapter
+        val pages = page.chapter.pages ?: return
         Timber.d("onReaderPageSelected: ${page.number}/${pages.size}")
         activity.onPageSelected(page)
+
+        // Skip preload on inserts it causes unwanted page jumping
+        if (page is InsertPage) {
+            return
+        }
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
@@ -205,11 +244,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
         adapter.setChapters(chapters, forceTransition)
 
         // Layout the pager once a chapter is being set
-        if (pager.visibility == View.GONE) {
+        if (pager.isGone) {
             Timber.d("Pager first layout")
             val pages = chapters.currChapter.pages ?: return
-            moveToPage(pages[chapters.currChapter.requestedPage])
-            pager.visible()
+            moveToPage(pages[min(chapters.currChapter.requestedPage, pages.lastIndex)])
+            pager.isVisible = true
         }
     }
 
@@ -293,6 +332,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
      */
     override fun handleKeyEvent(event: KeyEvent): Boolean {
         val isUp = event.action == KeyEvent.ACTION_UP
+        val ctrlPressed = event.metaState.and(KeyEvent.META_CTRL_ON) > 0
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
@@ -309,8 +349,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
                     if (!config.volumeKeysInverted) moveUp() else moveDown()
                 }
             }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (isUp) moveRight()
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (isUp) moveLeft()
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (isUp) {
+                    if (ctrlPressed) moveToNext() else moveRight()
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (isUp) {
+                    if (ctrlPressed) moveToPrevious() else moveLeft()
+                }
+            }
             KeyEvent.KEYCODE_DPAD_DOWN -> if (isUp) moveDown()
             KeyEvent.KEYCODE_DPAD_UP -> if (isUp) moveUp()
             KeyEvent.KEYCODE_PAGE_DOWN -> if (isUp) moveDown()
@@ -339,5 +387,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
             }
         }
         return false
+    }
+
+    fun onPageSplit(currentPage: ReaderPage, newPage: InsertPage) {
+        activity.runOnUiThread {
+            // Need to insert on UI thread else images will go blank
+            adapter.onPageSplit(currentPage, newPage)
+        }
+    }
+
+    private fun cleanupPageSplit() {
+        adapter.cleanupPageSplit()
     }
 }

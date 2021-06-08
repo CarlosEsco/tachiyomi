@@ -4,10 +4,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
+import eu.kanade.tachiyomi.data.backup.full.FullBackupManager
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.acquireWakeLock
 import eu.kanade.tachiyomi.util.system.isServiceRunning
@@ -51,11 +53,7 @@ class BackupCreateService : Service() {
                     putExtra(BackupConst.EXTRA_URI, uri)
                     putExtra(BackupConst.EXTRA_FLAGS, flags)
                 }
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                    context.startService(intent)
-                } else {
-                    context.startForegroundService(intent)
-                }
+                ContextCompat.startForegroundService(context, intent)
             }
         }
     }
@@ -65,7 +63,6 @@ class BackupCreateService : Service() {
      */
     private lateinit var wakeLock: PowerManager.WakeLock
 
-    private lateinit var backupManager: BackupManager
     private lateinit var notifier: BackupNotifier
 
     override fun onCreate() {
@@ -102,11 +99,9 @@ class BackupCreateService : Service() {
         if (intent == null) return START_NOT_STICKY
 
         try {
-            val uri = intent.getParcelableExtra<Uri>(BackupConst.EXTRA_URI)
+            val uri = intent.getParcelableExtra<Uri>(BackupConst.EXTRA_URI)!!
             val backupFlags = intent.getIntExtra(BackupConst.EXTRA_FLAGS, 0)
-            backupManager = BackupManager(this)
-
-            val backupFileUri = Uri.parse(backupManager.createBackup(uri, backupFlags, false))
+            val backupFileUri = FullBackupManager(this).createBackup(uri, backupFlags, false)?.toUri()
             val unifile = UniFile.fromUri(this, backupFileUri)
             notifier.showBackupComplete(unifile)
         } catch (e: Exception) {

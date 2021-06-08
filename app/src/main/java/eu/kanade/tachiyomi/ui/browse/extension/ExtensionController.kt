@@ -5,11 +5,11 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
 import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
+import dev.chrisbanes.insetter.applyInsetter
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
@@ -18,12 +18,12 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.ui.base.controller.NucleusController
 import eu.kanade.tachiyomi.ui.base.controller.withFadeTransaction
 import eu.kanade.tachiyomi.ui.browse.BrowseController
+import eu.kanade.tachiyomi.ui.browse.extension.details.ExtensionDetailsController
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import reactivecircus.flowbinding.appcompat.queryTextChanges
 import reactivecircus.flowbinding.swiperefreshlayout.refreshes
-import uy.kohesive.injekt.api.get
 
 /**
  * Controller to manage the catalogues available in the app.
@@ -56,25 +56,27 @@ open class ExtensionController :
         return ExtensionPresenter()
     }
 
-    override fun inflateView(inflater: LayoutInflater, container: ViewGroup): View {
-        binding = ExtensionControllerBinding.inflate(inflater)
-        return binding.root
-    }
+    override fun createBinding(inflater: LayoutInflater) = ExtensionControllerBinding.inflate(inflater)
 
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
 
-        binding.extSwipeRefresh.isRefreshing = true
-        binding.extSwipeRefresh.refreshes()
+        binding.recycler.applyInsetter {
+            type(navigationBars = true) {
+                padding()
+            }
+        }
+
+        binding.swipeRefresh.isRefreshing = true
+        binding.swipeRefresh.refreshes()
             .onEach { presenter.findAvailableExtensions() }
-            .launchIn(scope)
+            .launchIn(viewScope)
 
         // Initialize adapter, scroll listener and recycler views
         adapter = ExtensionAdapter(this)
         // Create recycler and set adapter.
-        binding.extRecycler.layoutManager = LinearLayoutManager(view.context)
-        binding.extRecycler.adapter = adapter
-        binding.extRecycler.addItemDecoration(ExtensionDividerItemDecoration(view.context))
+        binding.recycler.layoutManager = LinearLayoutManager(view.context)
+        binding.recycler.adapter = adapter
         adapter?.fastScroller = binding.fastScroller
     }
 
@@ -87,11 +89,10 @@ open class ExtensionController :
         when (item.itemId) {
             R.id.action_search -> expandActionViewFromInteraction = true
             R.id.action_settings -> {
-                (parentController as BrowseController).pushController(
+                parentController!!.router.pushController(
                     ExtensionFilterController().withFadeTransaction()
                 )
             }
-            else -> return super.onOptionsItemSelected(item)
         }
         return super.onOptionsItemSelected(item)
     }
@@ -106,6 +107,8 @@ open class ExtensionController :
     override fun onButtonClick(position: Int) {
         val extension = (adapter?.getItem(position) as? ExtensionItem)?.extension ?: return
         when (extension) {
+            is Extension.Available -> presenter.installExtension(extension)
+            is Extension.Untrusted -> openTrustDialog(extension)
             is Extension.Installed -> {
                 if (!extension.hasUpdate) {
                     openDetails(extension)
@@ -113,21 +116,18 @@ open class ExtensionController :
                     presenter.updateExtension(extension)
                 }
             }
-            is Extension.Available -> {
-                presenter.installExtension(extension)
-            }
-            is Extension.Untrusted -> {
-                openTrustDialog(extension)
-            }
         }
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.extension_main, menu)
+        inflater.inflate(R.menu.browse_extensions, menu)
 
         val searchItem = menu.findItem(R.id.action_search)
         val searchView = searchItem.actionView as SearchView
         searchView.maxWidth = Int.MAX_VALUE
+
+        // Fixes problem with the overflow icon showing up in lieu of search
+        searchItem.fixExpand(onExpand = { invalidateMenuOnExpand() })
 
         if (query.isNotEmpty()) {
             searchItem.expandActionView()
@@ -141,20 +141,16 @@ open class ExtensionController :
                 query = it.toString()
                 drawExtensions()
             }
-            .launchIn(scope)
-
-        // Fixes problem with the overflow icon showing up in lieu of search
-        searchItem.fixExpand(onExpand = { invalidateMenuOnExpand() })
+            .launchIn(viewScope)
     }
 
     override fun onItemClick(view: View, position: Int): Boolean {
         val extension = (adapter?.getItem(position) as? ExtensionItem)?.extension ?: return false
-        if (extension is Extension.Installed) {
-            openDetails(extension)
-        } else if (extension is Extension.Untrusted) {
-            openTrustDialog(extension)
+        when (extension) {
+            is Extension.Available -> presenter.installExtension(extension)
+            is Extension.Untrusted -> openTrustDialog(extension)
+            is Extension.Installed -> openDetails(extension)
         }
-
         return false
     }
 
@@ -167,7 +163,7 @@ open class ExtensionController :
 
     private fun openDetails(extension: Extension.Installed) {
         val controller = ExtensionDetailsController(extension.pkgName)
-        (parentController as BrowseController).pushController(controller.withFadeTransaction())
+        parentController!!.router.pushController(controller.withFadeTransaction())
     }
 
     private fun openTrustDialog(extension: Extension.Untrusted) {
@@ -176,7 +172,7 @@ open class ExtensionController :
     }
 
     fun setExtensions(extensions: List<ExtensionItem>) {
-        binding.extSwipeRefresh.isRefreshing = false
+        binding.swipeRefresh.isRefreshing = false
         this.extensions = extensions
         drawExtensions()
 
@@ -187,7 +183,7 @@ open class ExtensionController :
     }
 
     private fun drawExtensions() {
-        if (!query.isBlank()) {
+        if (query.isNotBlank()) {
             adapter?.updateDataSet(
                 extensions.filter {
                     it.extension.name.contains(query, ignoreCase = true)

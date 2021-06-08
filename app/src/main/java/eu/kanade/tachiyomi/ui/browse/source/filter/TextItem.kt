@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.browse.source.filter
 
 import android.view.View
 import android.widget.EditText
+import androidx.core.widget.doOnTextChanged
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputLayout
 import eu.davidea.flexibleadapter.FlexibleAdapter
@@ -10,16 +11,8 @@ import eu.davidea.flexibleadapter.items.IFlexible
 import eu.davidea.viewholders.FlexibleViewHolder
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.model.Filter
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import reactivecircus.flowbinding.android.widget.textChanges
 
 open class TextItem(val filter: Filter.Text) : AbstractFlexibleItem<TextItem.Holder>() {
-
-    private val scope = CoroutineScope(Job() + Dispatchers.Main)
 
     override fun getLayoutRes(): Int {
         return R.layout.navigation_view_text
@@ -32,9 +25,9 @@ open class TextItem(val filter: Filter.Text) : AbstractFlexibleItem<TextItem.Hol
     override fun bindViewHolder(adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>, holder: Holder, position: Int, payloads: List<Any?>?) {
         holder.wrapper.hint = filter.name
         holder.edit.setText(filter.state)
-        holder.edit.textChanges()
-            .onEach { filter.state = it.toString() }
-            .launchIn(scope)
+        holder.edit.doOnTextChanged { text, _, _, _ ->
+            filter.state = text.toString()
+        }
     }
 
     override fun equals(other: Any?): Boolean {

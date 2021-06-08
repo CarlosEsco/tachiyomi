@@ -8,48 +8,51 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
-import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.afollestad.materialdialogs.MaterialDialog
 import com.afollestad.materialdialogs.list.listItems
-import com.f2prateek.rx.preferences.Preference
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.snackbar.Snackbar
+import com.tfcporciuncula.flow.Preference
+import dev.chrisbanes.insetter.applyInsetter
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Category
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.data.preference.PreferenceValues.DisplayMode
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.preference.asImmediateFlow
 import eu.kanade.tachiyomi.databinding.SourceControllerBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.online.HttpSource
-import eu.kanade.tachiyomi.ui.base.controller.NucleusController
+import eu.kanade.tachiyomi.ui.base.controller.FabController
+import eu.kanade.tachiyomi.ui.base.controller.SearchableNucleusController
 import eu.kanade.tachiyomi.ui.base.controller.withFadeTransaction
+import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchController
 import eu.kanade.tachiyomi.ui.library.ChangeMangaCategoriesDialog
-import eu.kanade.tachiyomi.ui.main.offsetAppbarHeight
+import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaController
+import eu.kanade.tachiyomi.ui.more.MoreController
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.connectivityManager
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
-import eu.kanade.tachiyomi.util.view.gone
 import eu.kanade.tachiyomi.util.view.inflate
 import eu.kanade.tachiyomi.util.view.shrinkOnScroll
 import eu.kanade.tachiyomi.util.view.snack
-import eu.kanade.tachiyomi.util.view.visible
 import eu.kanade.tachiyomi.widget.AutofitRecyclerView
 import eu.kanade.tachiyomi.widget.EmptyView
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import reactivecircus.flowbinding.appcompat.QueryTextEvent
-import reactivecircus.flowbinding.appcompat.queryTextEvents
-import rx.Subscription
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
 
@@ -57,15 +60,20 @@ import uy.kohesive.injekt.injectLazy
  * Controller to manage the catalogues available in the app.
  */
 open class BrowseSourceController(bundle: Bundle) :
-    NucleusController<SourceControllerBinding, BrowseSourcePresenter>(bundle),
+    SearchableNucleusController<SourceControllerBinding, BrowseSourcePresenter>(bundle),
+    FabController,
     FlexibleAdapter.OnItemClickListener,
     FlexibleAdapter.OnItemLongClickListener,
     FlexibleAdapter.EndlessScrollListener,
     ChangeMangaCategoriesDialog.Listener {
 
-    constructor(source: CatalogueSource) : this(
+    constructor(source: CatalogueSource, searchQuery: String? = null) : this(
         Bundle().apply {
             putLong(SOURCE_ID_KEY, source.id)
+
+            if (searchQuery != null) {
+                putString(SEARCH_QUERY_KEY, searchQuery)
+            }
         }
     )
 
@@ -74,7 +82,10 @@ open class BrowseSourceController(bundle: Bundle) :
     /**
      * Adapter containing the list of manga from the catalogue.
      */
-    private var adapter: FlexibleAdapter<IFlexible<*>>? = null
+    protected var adapter: FlexibleAdapter<IFlexible<*>>? = null
+
+    private var actionFab: ExtendedFloatingActionButton? = null
+    private var actionFabScrollListener: RecyclerView.OnScrollListener? = null
 
     /**
      * Snackbar containing an error message when a request fails.
@@ -94,7 +105,7 @@ open class BrowseSourceController(bundle: Bundle) :
     /**
      * Subscription for the number of manga per row.
      */
-    private var numColumnsSubscription: Subscription? = null
+    private var numColumnsJob: Job? = null
 
     /**
      * Endless loading item.
@@ -110,25 +121,19 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     override fun createPresenter(): BrowseSourcePresenter {
-        return BrowseSourcePresenter(args.getLong(SOURCE_ID_KEY))
+        return BrowseSourcePresenter(args.getLong(SOURCE_ID_KEY), args.getString(SEARCH_QUERY_KEY))
     }
 
-    override fun inflateView(inflater: LayoutInflater, container: ViewGroup): View {
-        binding = SourceControllerBinding.inflate(inflater)
-        return binding.root
-    }
+    override fun createBinding(inflater: LayoutInflater) = SourceControllerBinding.inflate(inflater)
 
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
-
-        // Prepare filter sheet
-        initFilterSheet()
 
         // Initialize adapter, scroll listener and recycler views
         adapter = FlexibleAdapter(null, this)
         setupRecycler(view)
 
-        binding.progress.visible()
+        binding.progress.isVisible = true
     }
 
     open fun initFilterSheet() {
@@ -154,18 +159,34 @@ open class BrowseSourceController(bundle: Bundle) :
         filterSheet?.setFilters(presenter.filterItems)
 
         // TODO: [ExtendedFloatingActionButton] hide/show methods don't work properly
-        filterSheet?.setOnShowListener { binding.fabFilter.gone() }
-        filterSheet?.setOnDismissListener { binding.fabFilter.visible() }
+        filterSheet?.setOnShowListener { actionFab?.isVisible = false }
+        filterSheet?.setOnDismissListener { actionFab?.isVisible = true }
 
-        binding.fabFilter.setOnClickListener { filterSheet?.show() }
+        actionFab?.setOnClickListener { filterSheet?.show() }
 
-        binding.fabFilter.offsetAppbarHeight(activity!!)
-        binding.fabFilter.visible()
+        actionFab?.isVisible = true
+    }
+
+    override fun configureFab(fab: ExtendedFloatingActionButton) {
+        actionFab = fab
+
+        fab.setText(R.string.action_filter)
+        fab.setIconResource(R.drawable.ic_filter_list_24dp)
+
+        // Controlled by initFilterSheet()
+        fab.isVisible = false
+        initFilterSheet()
+    }
+
+    override fun cleanupFab(fab: ExtendedFloatingActionButton) {
+        fab.setOnClickListener(null)
+        actionFabScrollListener?.let { recycler?.removeOnScrollListener(it) }
+        actionFab = null
     }
 
     override fun onDestroyView(view: View) {
-        numColumnsSubscription?.unsubscribe()
-        numColumnsSubscription = null
+        numColumnsJob?.cancel()
+        numColumnsJob = null
         adapter = null
         snack = null
         recycler = null
@@ -173,7 +194,7 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     private fun setupRecycler(view: View) {
-        numColumnsSubscription?.unsubscribe()
+        numColumnsJob?.cancel()
 
         var oldPosition = RecyclerView.NO_POSITION
         val oldRecycler = binding.catalogueView.getChildAt(1)
@@ -184,25 +205,24 @@ open class BrowseSourceController(bundle: Bundle) :
             binding.catalogueView.removeView(oldRecycler)
         }
 
-        val recycler = if (presenter.isListMode) {
+        val recycler = if (preferences.sourceDisplayMode().get() == DisplayMode.LIST) {
             RecyclerView(view.context).apply {
                 id = R.id.recycler
                 layoutManager = LinearLayoutManager(context)
                 layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                addItemDecoration(DividerItemDecoration(context, DividerItemDecoration.VERTICAL))
             }
         } else {
             (binding.catalogueView.inflate(R.layout.source_recycler_autofit) as AutofitRecyclerView).apply {
-                numColumnsSubscription = getColumnsPreferenceForCurrentOrientation().asObservable()
-                    .doOnNext { spanCount = it }
-                    .skip(1)
+                numColumnsJob = getColumnsPreferenceForCurrentOrientation().asImmediateFlow { spanCount = it }
+                    .drop(1)
                     // Set again the adapter to recalculate the covers height
-                    .subscribe { adapter = this@BrowseSourceController.adapter }
+                    .onEach { adapter = this@BrowseSourceController.adapter }
+                    .launchIn(viewScope)
 
                 (layoutManager as GridLayoutManager).spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
                     override fun getSpanSize(position: Int): Int {
                         return when (adapter?.getItemViewType(position)) {
-                            R.layout.source_grid_item, null -> 1
+                            R.layout.source_compact_grid_item, R.layout.source_comfortable_grid_item, null -> 1
                             else -> spanCount
                         }
                     }
@@ -212,17 +232,17 @@ open class BrowseSourceController(bundle: Bundle) :
 
         if (filterSheet != null) {
             // Add bottom padding if filter FAB is visible
-            recycler.setPadding(
-                recycler.paddingLeft,
-                recycler.paddingTop,
-                recycler.paddingRight,
-                view.resources.getDimensionPixelOffset(R.dimen.fab_list_padding)
-            )
+            recycler.updatePadding(bottom = view.resources.getDimensionPixelOffset(R.dimen.fab_list_padding))
             recycler.clipToPadding = false
 
-            binding.fabFilter.shrinkOnScroll(recycler)
+            actionFab?.shrinkOnScroll(recycler)
         }
 
+        recycler.applyInsetter {
+            type(navigationBars = true) {
+                padding()
+            }
+        }
         recycler.setHasFixedSize(true)
         recycler.adapter = adapter
 
@@ -235,43 +255,33 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.source_browse, menu)
-
-        // Initialize search menu
+        createOptionsMenu(menu, inflater, R.menu.source_browse, R.id.action_search)
         val searchItem = menu.findItem(R.id.action_search)
-        val searchView = searchItem.actionView as SearchView
-        searchView.maxWidth = Int.MAX_VALUE
-
-        val query = presenter.query
-        if (!query.isBlank()) {
-            searchItem.expandActionView()
-            searchView.setQuery(query, true)
-            searchView.clearFocus()
-        }
-
-        searchView.queryTextEvents()
-            .filter { router.backstack.lastOrNull()?.controller() == this@BrowseSourceController }
-            .filter { it is QueryTextEvent.QuerySubmitted }
-            .onEach { searchWithQuery(it.queryText.toString()) }
-            .launchIn(scope)
 
         searchItem.fixExpand(
             onExpand = { invalidateMenuOnExpand() },
             onCollapse = {
-                searchWithQuery("")
+                if (router.backstackSize >= 2 && router.backstack[router.backstackSize - 2].controller() is GlobalSearchController) {
+                    router.popController(this)
+                } else {
+                    nonSubmittedQuery = ""
+                    searchWithQuery("")
+                }
+
                 true
             }
         )
 
-        // Show next display mode
-        menu.findItem(R.id.action_display_mode).apply {
-            val icon = if (presenter.isListMode) {
-                R.drawable.ic_view_module_24dp
-            } else {
-                R.drawable.ic_view_list_24dp
-            }
-            setIcon(icon)
+        val displayItem = when (preferences.sourceDisplayMode().get()) {
+            DisplayMode.COMPACT_GRID -> R.id.action_compact_grid
+            DisplayMode.COMFORTABLE_GRID -> R.id.action_comfortable_grid
+            DisplayMode.LIST -> R.id.action_list
         }
+        menu.findItem(displayItem).isChecked = true
+    }
+
+    override fun onSearchViewQueryTextSubmit(query: String?) {
+        searchWithQuery(query ?: "")
     }
 
     override fun onPrepareOptionsMenu(menu: Menu) {
@@ -287,7 +297,9 @@ open class BrowseSourceController(bundle: Bundle) :
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_search -> expandActionViewFromInteraction = true
-            R.id.action_display_mode -> swapDisplayMode()
+            R.id.action_compact_grid -> setDisplayMode(DisplayMode.COMPACT_GRID)
+            R.id.action_comfortable_grid -> setDisplayMode(DisplayMode.COMFORTABLE_GRID)
+            R.id.action_list -> setDisplayMode(DisplayMode.LIST)
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_local_source_help -> openLocalSourceHelpGuide()
         }
@@ -364,21 +376,21 @@ open class BrowseSourceController(bundle: Bundle) :
         }
 
         if (adapter.isEmpty) {
-            val actions = emptyList<EmptyView.Action>().toMutableList()
-
-            if (presenter.source is LocalSource) {
-                actions += EmptyView.Action(R.string.local_source_help_guide, View.OnClickListener { openLocalSourceHelpGuide() })
+            val actions = if (presenter.source is LocalSource) {
+                listOf(
+                    EmptyView.Action(R.string.local_source_help_guide, R.drawable.ic_help_24dp) { openLocalSourceHelpGuide() }
+                )
             } else {
-                actions += EmptyView.Action(R.string.action_retry, retryAction)
-            }
-
-            if (presenter.source is HttpSource) {
-                actions += EmptyView.Action(R.string.action_open_in_web_view, View.OnClickListener { openInWebView() })
+                listOf(
+                    EmptyView.Action(R.string.action_retry, R.drawable.ic_refresh_24dp, retryAction),
+                    EmptyView.Action(R.string.action_open_in_web_view, R.drawable.ic_public_24dp) { openInWebView() },
+                    EmptyView.Action(R.string.label_help, R.drawable.ic_help_24dp) { activity?.openInBrowser(MoreController.URL_HELP) }
+                )
             }
 
             binding.emptyView.show(message, actions)
         } else {
-            snack = binding.catalogueView.snack(message, Snackbar.LENGTH_INDEFINITE) {
+            snack = (activity as? MainActivity)?.binding?.rootCoordinator?.snack(message, Snackbar.LENGTH_INDEFINITE) {
                 setAction(R.string.action_retry, retryAction)
             }
         }
@@ -430,18 +442,20 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     /**
-     * Swaps the current display mode.
+     * Sets the current display mode.
+     *
+     * @param mode the mode to change to
      */
-    fun swapDisplayMode() {
+    private fun setDisplayMode(mode: DisplayMode) {
         val view = view ?: return
         val adapter = adapter ?: return
 
-        presenter.swapDisplayMode()
-        val isListMode = presenter.isListMode
+        preferences.sourceDisplayMode().set(mode)
         activity?.invalidateOptionsMenu()
         setupRecycler(view)
-        if (!isListMode || !view.context.connectivityManager.isActiveNetworkMetered) {
-            // Initialize mangas if going to grid view or if over wifi when going to list view
+
+        // Initialize mangas if not on a metered connection
+        if (!view.context.connectivityManager.isActiveNetworkMetered) {
             val mangas = (0 until adapter.itemCount).mapNotNull {
                 (adapter.getItem(it) as? SourceItem)?.manga
             }
@@ -468,13 +482,13 @@ open class BrowseSourceController(bundle: Bundle) :
      * @param manga the manga to find.
      * @return the holder of the manga or null if it's not bound.
      */
-    private fun getHolder(manga: Manga): SourceHolder? {
+    private fun getHolder(manga: Manga): SourceHolder<*>? {
         val adapter = adapter ?: return null
 
         adapter.allBoundViewHolders.forEach { holder ->
             val item = adapter.getItem(holder.bindingAdapterPosition) as? SourceItem
             if (item != null && item.manga.id!! == manga.id!!) {
-                return holder as SourceHolder
+                return holder as SourceHolder<*>
             }
         }
 
@@ -486,7 +500,7 @@ open class BrowseSourceController(bundle: Bundle) :
      */
     private fun showProgressBar() {
         binding.emptyView.hide()
-        binding.progress.visible()
+        binding.progress.isVisible = true
         snack?.dismiss()
         snack = null
     }
@@ -496,7 +510,7 @@ open class BrowseSourceController(bundle: Bundle) :
      */
     private fun hideProgressBar() {
         binding.emptyView.hide()
-        binding.progress.gone()
+        binding.progress.isVisible = false
     }
 
     /**
@@ -599,5 +613,6 @@ open class BrowseSourceController(bundle: Bundle) :
 
     protected companion object {
         const val SOURCE_ID_KEY = "sourceId"
+        const val SEARCH_QUERY_KEY = "searchQuery"
     }
 }

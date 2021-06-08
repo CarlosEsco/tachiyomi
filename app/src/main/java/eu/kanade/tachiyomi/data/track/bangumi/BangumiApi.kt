@@ -1,172 +1,161 @@
 package eu.kanade.tachiyomi.data.track.bangumi
 
 import android.net.Uri
-import com.github.salomonbrys.kotson.array
-import com.github.salomonbrys.kotson.obj
-import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import androidx.core.net.toUri
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.network.asObservableSuccess
-import java.net.URLEncoder
+import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.parseAs
+import eu.kanade.tachiyomi.util.lang.withIOContext
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.CacheControl
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import rx.Observable
 import uy.kohesive.injekt.injectLazy
+import java.net.URLEncoder
 
 class BangumiApi(private val client: OkHttpClient, interceptor: BangumiInterceptor) {
 
-    private val gson: Gson by injectLazy()
+    private val json: Json by injectLazy()
+
     private val authClient = client.newBuilder().addInterceptor(interceptor).build()
 
-    fun addLibManga(track: Track): Observable<Track> {
-        val body = FormBody.Builder()
-            .add("rating", track.score.toInt().toString())
-            .add("status", track.toBangumiStatus())
-            .build()
-        val request = Request.Builder()
-            .url("$apiUrl/collection/${track.media_id}/update")
-            .post(body)
-            .build()
-        return authClient.newCall(request)
-            .asObservableSuccess()
-            .map {
-                track
-            }
+    suspend fun addLibManga(track: Track): Track {
+        return withIOContext {
+            val body = FormBody.Builder()
+                .add("rating", track.score.toInt().toString())
+                .add("status", track.toBangumiStatus())
+                .build()
+            authClient.newCall(POST("$apiUrl/collection/${track.media_id}/update", body = body))
+                .await()
+            track
+        }
     }
 
-    fun updateLibManga(track: Track): Observable<Track> {
-        // chapter update
-        val body = FormBody.Builder()
-            .add("watched_eps", track.last_chapter_read.toString())
-            .build()
-        val request = Request.Builder()
-            .url("$apiUrl/subject/${track.media_id}/update/watched_eps")
-            .post(body)
-            .build()
+    suspend fun updateLibManga(track: Track): Track {
+        return withIOContext {
+            // read status update
+            val sbody = FormBody.Builder()
+                .add("rating", track.score.toInt().toString())
+                .add("status", track.toBangumiStatus())
+                .build()
+            authClient.newCall(POST("$apiUrl/collection/${track.media_id}/update", body = sbody))
+                .await()
 
-        // read status update
-        val sbody = FormBody.Builder()
-            .add("status", track.toBangumiStatus())
-            .build()
-        val srequest = Request.Builder()
-            .url("$apiUrl/collection/${track.media_id}/update")
-            .post(sbody)
-            .build()
-        return authClient.newCall(srequest)
-            .asObservableSuccess()
-            .map {
-                track
-            }.flatMap {
-                authClient.newCall(request)
-                    .asObservableSuccess()
-                    .map {
-                        track
+            // chapter update
+            val body = FormBody.Builder()
+                .add("watched_eps", track.last_chapter_read.toString())
+                .build()
+            authClient.newCall(
+                POST(
+                    "$apiUrl/subject/${track.media_id}/update/watched_eps",
+                    body = body
+                )
+            ).await()
+
+            track
+        }
+    }
+
+    suspend fun search(search: String): List<TrackSearch> {
+        return withIOContext {
+            val url = "$apiUrl/search/subject/${URLEncoder.encode(search, Charsets.UTF_8.name())}"
+                .toUri()
+                .buildUpon()
+                .appendQueryParameter("max_results", "20")
+                .build()
+            authClient.newCall(GET(url.toString()))
+                .await()
+                .use {
+                    var responseBody = it.body?.string().orEmpty()
+                    if (responseBody.isEmpty()) {
+                        throw Exception("Null Response")
                     }
-            }
-    }
-
-    fun search(search: String): Observable<List<TrackSearch>> {
-        val url = Uri.parse(
-            "$apiUrl/search/subject/${URLEncoder.encode(search, Charsets.UTF_8.name())}"
-        ).buildUpon()
-            .appendQueryParameter("max_results", "20")
-            .build()
-        val request = Request.Builder()
-            .url(url.toString())
-            .get()
-            .build()
-        return authClient.newCall(request)
-            .asObservableSuccess()
-            .map { netResponse ->
-                var responseBody = netResponse.body?.string().orEmpty()
-                if (responseBody.isEmpty()) {
-                    throw Exception("Null Response")
+                    if (responseBody.contains("\"code\":404")) {
+                        responseBody = "{\"results\":0,\"list\":[]}"
+                    }
+                    val response = json.decodeFromString<JsonObject>(responseBody)["list"]?.jsonArray
+                    response?.filter { it.jsonObject["type"]?.jsonPrimitive?.int == 1 }
+                        ?.map { jsonToSearch(it.jsonObject) }.orEmpty()
                 }
-                if (responseBody.contains("\"code\":404")) {
-                    responseBody = "{\"results\":0,\"list\":[]}"
-                }
-                val response = JsonParser.parseString(responseBody).obj["list"]?.array
-                response?.filter { it.obj["type"].asInt == 1 }?.map { jsonToSearch(it.obj) }
-            }
+        }
     }
 
     private fun jsonToSearch(obj: JsonObject): TrackSearch {
+        val coverUrl = if (obj["images"] is JsonObject) {
+            obj["images"]?.jsonObject?.get("common")?.jsonPrimitive?.contentOrNull ?: ""
+        } else {
+            // Sometimes JsonNull
+            ""
+        }
+        val totalChapters = if (obj["eps_count"] != null) {
+            obj["eps_count"]!!.jsonPrimitive.int
+        } else {
+            0
+        }
         return TrackSearch.create(TrackManager.BANGUMI).apply {
-            media_id = obj["id"].asInt
-            title = obj["name_cn"].asString
-            cover_url = obj["images"].obj["common"].asString
-            summary = obj["name"].asString
-            tracking_url = obj["url"].asString
+            media_id = obj["id"]!!.jsonPrimitive.int
+            title = obj["name_cn"]!!.jsonPrimitive.content
+            cover_url = coverUrl
+            summary = obj["name"]!!.jsonPrimitive.content
+            tracking_url = obj["url"]!!.jsonPrimitive.content
+            total_chapters = totalChapters
         }
     }
 
-    private fun jsonToTrack(mangas: JsonObject): Track {
-        return Track.create(TrackManager.BANGUMI).apply {
-            title = mangas["name"].asString
-            media_id = mangas["id"].asInt
-            score = if (mangas["rating"] != null) {
-                if (mangas["rating"].isJsonObject) {
-                    mangas["rating"].obj["score"].asFloat
-                } else {
-                    0f
-                }
-            } else {
-                0f
-            }
-            status = Bangumi.DEFAULT_STATUS
-            tracking_url = mangas["url"].asString
+    suspend fun findLibManga(track: Track): Track? {
+        return withIOContext {
+            authClient.newCall(GET("$apiUrl/subject/${track.media_id}"))
+                .await()
+                .parseAs<JsonObject>()
+                .let { jsonToSearch(it) }
         }
     }
 
-    fun findLibManga(track: Track): Observable<Track?> {
-        val urlMangas = "$apiUrl/subject/${track.media_id}"
-        val requestMangas = Request.Builder()
-            .url(urlMangas)
-            .get()
-            .build()
+    suspend fun statusLibManga(track: Track): Track? {
+        return withIOContext {
+            val urlUserRead = "$apiUrl/collection/${track.media_id}"
+            val requestUserRead = Request.Builder()
+                .url(urlUserRead)
+                .cacheControl(CacheControl.FORCE_NETWORK)
+                .get()
+                .build()
 
-        return authClient.newCall(requestMangas)
-            .asObservableSuccess()
-            .map { netResponse ->
-                // get comic info
-                val responseBody = netResponse.body?.string().orEmpty()
-                jsonToTrack(JsonParser.parseString(responseBody).obj)
-            }
-    }
-
-    fun statusLibManga(track: Track): Observable<Track?> {
-        val urlUserRead = "$apiUrl/collection/${track.media_id}"
-        val requestUserRead = Request.Builder()
-            .url(urlUserRead)
-            .cacheControl(CacheControl.FORCE_NETWORK)
-            .get()
-            .build()
-
-        // todo get user readed chapter here
-        return authClient.newCall(requestUserRead)
-            .asObservableSuccess()
-            .map { netResponse ->
-                val resp = netResponse.body?.string()
-                val coll = gson.fromJson(resp, Collection::class.java)
-                track.status = coll.status?.id!!
-                track.last_chapter_read = coll.ep_status!!
-                track
-            }
-    }
-
-    fun accessToken(code: String): Observable<OAuth> {
-        return client.newCall(accessTokenRequest(code)).asObservableSuccess().map { netResponse ->
-            val responseBody = netResponse.body?.string().orEmpty()
+            // TODO: get user readed chapter here
+            var response = authClient.newCall(requestUserRead).await()
+            var responseBody = response.body?.string().orEmpty()
             if (responseBody.isEmpty()) {
                 throw Exception("Null Response")
             }
-            gson.fromJson(responseBody, OAuth::class.java)
+            if (responseBody.contains("\"code\":400")) {
+                null
+            } else {
+                json.decodeFromString<Collection>(responseBody).let {
+                    track.status = it.status?.id!!
+                    track.last_chapter_read = it.ep_status!!
+                    track.score = it.rating!!
+                    track
+                }
+            }
+        }
+    }
+
+    suspend fun accessToken(code: String): OAuth {
+        return withIOContext {
+            client.newCall(accessTokenRequest(code))
+                .await()
+                .parseAs()
         }
     }
 
@@ -196,8 +185,8 @@ class BangumiApi(private val client: OkHttpClient, interceptor: BangumiIntercept
             return "$baseMangaUrl/$remoteId"
         }
 
-        fun authUrl() =
-            Uri.parse(loginUrl).buildUpon()
+        fun authUrl(): Uri =
+            loginUrl.toUri().buildUpon()
                 .appendQueryParameter("client_id", clientId)
                 .appendQueryParameter("response_type", "code")
                 .appendQueryParameter("redirect_uri", redirectUrl)

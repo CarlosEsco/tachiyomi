@@ -10,7 +10,6 @@
     <string name="action_settings">सेटिंग्ज</string>
     <string name="action_filter">फिल्टर</string>
     <string name="action_filter_unread">न वाचलेले</string>
-    <string name="action_filter_read">वाचा</string>
     <string name="action_filter_empty">फिल्टर काढा</string>
     <string name="action_sort_total">एकूण अध्याय</string>
     <string name="history">इतिहास</string>
@@ -28,7 +27,6 @@
     <string name="pref_true_color">३२-बिट रंग</string>
     <string name="black_background">काळा</string>
     <string name="channel_common">सामान्य</string>
-    <string name="channel_downloader">डाउनलोडर</string>
     <string name="action_menu">मेनू</string>
     <string name="action_filter_bookmarked">बुकमार्क आहे</string>
     <string name="confirm_exit">अॅप बंद करण्यासाठी बॅक पुन्हा दाबा</string>
@@ -44,11 +42,10 @@
     <string name="label_extension_info">एक्स्टेन्शन माहिती</string>
     <string name="label_extensions">एक्स्टेन्शन</string>
     <string name="label_migration">स्त्रोत स्तालांतर</string>
-    <string name="label_categories">श्रेण्या</string>
     <string name="label_sources">स्त्रोत</string>
     <string name="label_recent_updates">अद्यतनित करा</string>
     <string name="label_library">संग्रहालय</string>
-    <string name="label_download_queue">डाऊनलोड संख्या</string>
+    <string name="label_download_queue">डाऊनलोड रांग</string>
     <string name="action_restore">पुनर्संचयित करा</string>
     <string name="action_create">बनवा</string>
     <string name="action_open_log">लॉग उघडा</string>
@@ -67,7 +64,6 @@
     <string name="action_cancel">रद्द करा</string>
     <string name="action_unpin">पिन काढा</string>
     <string name="action_pin">पिन</string>
-    <string name="action_hide">लपवा</string>
     <string name="action_display_unread_badge">न वाचलेले बॅज</string>
     <string name="action_display_download_badge">Download बॅज</string>
     <string name="action_display_list">यादी</string>
@@ -76,20 +72,14 @@
     <string name="action_display_mode">प्रदर्शन मोड</string>
     <string name="action_open_in_web_view">वेबव्ह्यू मध्ये उघडा</string>
     <string name="action_open_in_browser">ब्राऊझर मध्ये उघडा</string>
-    <string name="action_move">हलवा</string>
     <string name="action_resume">सुरू करा</string>
     <string name="action_remove">काढून टाका</string>
     <string name="action_retry">पुन्हा प्रयत्न करा</string>
     <string name="action_next_chapter">पुढील अध्याय</string>
     <string name="action_previous_chapter">मागील अध्याय</string>
-    <string name="action_close">बंद करा</string>
     <string name="action_pause">विराम द्या</string>
     <string name="action_stop">थांबवा</string>
     <string name="action_view_chapters">अध्याय बघा</string>
-    <string name="action_next_unread">पुढील न वाचलेले</string>
-    <string name="action_show_downloaded">डाऊनलोड केलेले</string>
-    <string name="action_sort_down">क्रमवारी लावा</string>
-    <string name="action_sort_up">क्रमानी लावा</string>
     <string name="action_edit_cover">कव्हर बदलवा</string>
     <string name="action_move_category">श्रेणी सेट करा</string>
     <string name="action_rename_category">श्रेणी पुन्हा नामांकित करा</string>
@@ -143,14 +133,11 @@
     <string name="pref_category_reader">वाचक</string>
     <string name="pref_category_library">संग्रहालय</string>
     <string name="pref_category_general">जनरल</string>
-    <string name="short_recent_updates">अध्यतणे</string>
     <string name="app_not_available">ऐप उपलब्ध नाही</string>
     <string name="loading">लोड होत आहे …</string>
     <string name="action_webview_refresh">रीफ्रेश</string>
     <string name="action_webview_forward">पुढे</string>
     <string name="action_webview_back">मागे जा</string>
-    <string name="action_login">लोग इन</string>
-    <string name="action_open">उघडा</string>
     <string name="pref_crop_borders">सीमानां कापा</string>
     <string name="pref_true_color_summary">बॅन्डिंग कमी करते, परंतु कार्यप्रदर्शनावर परिणाम करते</string>
     <string name="pref_show_page_number">पृष्ठ क्रमांक दर्शवा</string>
@@ -158,7 +145,6 @@
     <string name="pref_page_transitions">पृष्ठ संक्रमण संजीवित करा</string>
     <string name="pref_lock_orientation">अभिमुखता</string>
     <string name="pref_cutout_short">कटआउट क्षेत्रात सामग्री दर्शवा</string>
-    <string name="ext_empty_preferences">या विस्तारासाठी संपादित करण्यासाठी कोणतीही प्राधान्ये नाहीत</string>
     <string name="obsolete_extension_message">हे एक्सटेन्शन उपलब्ध नाही.</string>
     <string name="untrusted_extension_message">हे एक्सटेन्शन एका अविश्वासू प्रमानपत्रासहित आले आहे म्हणून हे स्थापित होऊ शकले नाही. 
 \n
@@ -167,7 +153,6 @@
 \nव अश्या एक्सटेन्शन वर विश्वास करून तुम्ही ह्या सगद्या जोखीम घेत आहेत.</string>
     <string name="untrusted_extension">अविश्वासू एक्सटेन्शन</string>
     <string name="ext_available">उपलब्ध</string>
-    <string name="ext_preferences">प्राधान्ये</string>
     <string name="ext_uninstall">विस्थापित करा</string>
     <string name="ext_untrusted">अविश्वासू</string>
     <string name="ext_trust">विश्वास</string>
@@ -179,20 +164,14 @@
     <string name="ext_obsolete">कालबाह्य</string>
     <string name="ext_update">अध्यातणीत करा</string>
     <string name="ext_updates_pending">प्रलंबित अध्यातणे</string>
-    <string name="ext_details">तपशिले</string>
     <string name="all_lang">सगडे</string>
     <string name="all">सगडे</string>
-    <string name="pref_library_update_categories">जागतिक अध्यतानामध्ये समाविष्ट होणाऱ्या श्रेणी</string>
     <string name="default_category_summary">नेहमी विचारायचे</string>
     <string name="default_category">मूलभूत श्रेणी</string>
-    <string name="pref_category_library_categories">श्रेणीं</string>
     <string name="pref_update_only_non_completed">फक्त चालू असलेल्याच मांगा आधीतणीत करायचे</string>
     <string name="charging">चार्ज होत आहे</string>
-    <string name="wifi">वाय-फाय</string>
-    <string name="pref_library_update_restriction_summary">अटी पूर्ण झाल्यावरच अध्यातन करावे</string>
     <string name="pref_library_update_restriction">लायब्ररी अद्ययावत प्रतिबंधी</string>
     <string name="pref_library_update_prioritization">लायब्ररी अद्ययावत क्रम</string>
-    <string name="update_monthly">मासिक</string>
     <string name="double_tap_anim_speed_0">अनिमेशन नाही</string>
     <string name="zoom_start_center">सेंटर</string>
     <string name="zoom_start_right">उजवी बाजू</string>
@@ -206,7 +185,6 @@
     <string name="scale_type_stretch">ताणून लांब करणे</string>
     <string name="scale_type_fit_screen">फिट स्क्रीन</string>
     <string name="pref_image_scale_type">स्केल प्रकार</string>
-    <string name="pref_image_decoder">प्रतिमा डीकोडर</string>
     <string name="pager_viewer">पृष्ठबद्ध</string>
     <string name="vertical_plus_viewer">सतत उभे</string>
     <string name="webtoon_viewer">वेबटून</string>
@@ -244,8 +222,6 @@
     <string name="update_12hour">दर १२ तासाला</string>
     <string name="update_6hour">दर ६ तासाला</string>
     <string name="update_3hour">दर ३ तासाला</string>
-    <string name="update_2hour">दर २ तासाला</string>
-    <string name="update_1hour">दर तासाला</string>
     <string name="update_never">स्वतः करा</string>
     <string name="pref_library_update_interval">लायब्ररी अद्यतन वारंवारता</string>
     <string name="pref_category_library_update">अद्यतने</string>

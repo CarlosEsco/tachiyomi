@@ -10,15 +10,15 @@ import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.base.presenter.BasePresenter
 import eu.kanade.tachiyomi.ui.recent.DateSectionItem
 import eu.kanade.tachiyomi.util.lang.toDateKey
-import java.util.Calendar
-import java.util.Date
-import java.util.TreeMap
 import rx.Observable
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
 import timber.log.Timber
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.Calendar
+import java.util.Date
+import java.util.TreeMap
 
 class UpdatesPresenter(
     val preferences: PreferencesHelper = Injekt.get(),
@@ -39,8 +39,25 @@ class UpdatesPresenter(
             .observeOn(AndroidSchedulers.mainThread())
             .subscribeLatestCache(UpdatesController::onNextRecentChapters)
 
-        getChapterStatusObservable()
-            .subscribeLatestCache(UpdatesController::onChapterStatusChange) { _, error ->
+        downloadManager.queue.getStatusObservable()
+            .observeOn(Schedulers.io())
+            .onBackpressureBuffer()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeLatestCache(
+                { view, it ->
+                    onDownloadStatusChange(it)
+                    view.onChapterDownloadUpdate(it)
+                },
+                { _, error ->
+                    Timber.e(error)
+                }
+            )
+
+        downloadManager.queue.getProgressObservable()
+            .observeOn(Schedulers.io())
+            .onBackpressureBuffer()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeLatestCache(UpdatesController::onChapterDownloadUpdate) { _, error ->
                 Timber.e(error)
             }
     }
@@ -87,17 +104,6 @@ class UpdatesPresenter(
     }
 
     /**
-     * Returns observable containing chapter status.
-     *
-     * @return download object containing download progress.
-     */
-    private fun getChapterStatusObservable(): Observable<Download> {
-        return downloadManager.queue.getStatusObservable()
-            .observeOn(AndroidSchedulers.mainThread())
-            .doOnNext { download -> onDownloadStatusChange(download) }
-    }
-
-    /**
      * Finds and assigns the list of downloaded chapters.
      *
      * @param items the list of chapter from the database.
@@ -108,7 +114,7 @@ class UpdatesPresenter(
             val chapter = item.chapter
 
             if (downloadManager.isChapterDownloaded(chapter, manga)) {
-                item.status = Download.DOWNLOADED
+                item.status = Download.State.DOWNLOADED
             }
         }
     }
@@ -120,7 +126,7 @@ class UpdatesPresenter(
      */
     private fun onDownloadStatusChange(download: Download) {
         // Assign the download to the model object.
-        if (download.status == Download.QUEUE) {
+        if (download.status == Download.State.QUEUE) {
             val chapter = chapters.find { it.chapter.id == download.chapter.id }
             if (chapter != null && chapter.download == null) {
                 chapter.download = download
@@ -188,7 +194,7 @@ class UpdatesPresenter(
 
             downloadManager.deleteChapters(chapters, manga, source)
             items.forEach {
-                it.status = Download.NOT_DOWNLOADED
+                it.status = Download.State.NOT_DOWNLOADED
                 it.download = null
             }
         }

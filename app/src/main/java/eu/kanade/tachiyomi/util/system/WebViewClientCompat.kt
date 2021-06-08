@@ -54,15 +54,17 @@ abstract class WebViewClientCompat : WebViewClient() {
         return shouldInterceptRequestCompat(view, url)
     }
 
-    @TargetApi(Build.VERSION_CODES.M)
     final override fun onReceivedError(
         view: WebView,
         request: WebResourceRequest,
         error: WebResourceError
     ) {
         onReceivedErrorCompat(
-            view, error.errorCode, error.description?.toString(),
-            request.url.toString(), request.isForMainFrame
+            view,
+            error.errorCode,
+            error.description?.toString(),
+            request.url.toString(),
+            request.isForMainFrame
         )
     }
 
@@ -75,14 +77,15 @@ abstract class WebViewClientCompat : WebViewClient() {
         onReceivedErrorCompat(view, errorCode, description, failingUrl, failingUrl == view.url)
     }
 
-    @TargetApi(Build.VERSION_CODES.M)
     final override fun onReceivedHttpError(
         view: WebView,
         request: WebResourceRequest,
         error: WebResourceResponse
     ) {
         onReceivedErrorCompat(
-            view, error.statusCode, error.reasonPhrase,
+            view,
+            error.statusCode,
+            error.reasonPhrase,
             request.url
                 .toString(),
             request.isForMainFrame

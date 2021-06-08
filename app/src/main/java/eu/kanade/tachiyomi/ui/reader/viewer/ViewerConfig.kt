@@ -1,10 +1,9 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
 import com.tfcporciuncula.flow.Preference
+import eu.kanade.tachiyomi.data.preference.PreferenceValues.TappingInvertMode
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -12,19 +11,36 @@ import kotlinx.coroutines.flow.onEach
 /**
  * Common configuration for all viewers.
  */
-abstract class ViewerConfig(preferences: PreferencesHelper) {
-
-    private val scope = CoroutineScope(Job() + Dispatchers.Main)
+abstract class ViewerConfig(preferences: PreferencesHelper, private val scope: CoroutineScope) {
 
     var imagePropertyChangedListener: (() -> Unit)? = null
 
+    var navigationModeChangedListener: (() -> Unit)? = null
+
     var tappingEnabled = true
+    var tappingInverted = TappingInvertMode.NONE
     var longTapEnabled = true
+    var usePageTransitions = false
     var doubleTapAnimDuration = 500
     var volumeKeysEnabled = false
     var volumeKeysInverted = false
     var trueColor = false
     var alwaysShowChapterTransition = true
+    var navigationMode = 0
+        protected set
+
+    var forceNavigationOverlay = false
+
+    var navigationOverlayOnStart = false
+
+    var dualPageSplit = false
+        protected set
+
+    var dualPageInvert = false
+        protected set
+
+    abstract var navigator: ViewerNavigation
+        protected set
 
     init {
         preferences.readWithTapping()
@@ -32,6 +48,9 @@ abstract class ViewerConfig(preferences: PreferencesHelper) {
 
         preferences.readWithLongTap()
             .register({ longTapEnabled = it })
+
+        preferences.pageTransitions()
+            .register({ usePageTransitions = it })
 
         preferences.doubleTapAnimSpeed()
             .register({ doubleTapAnimDuration = it })
@@ -47,7 +66,19 @@ abstract class ViewerConfig(preferences: PreferencesHelper) {
 
         preferences.alwaysShowChapterTransition()
             .register({ alwaysShowChapterTransition = it })
+
+        forceNavigationOverlay = preferences.showNavigationOverlayNewUser().get()
+        if (forceNavigationOverlay) {
+            preferences.showNavigationOverlayNewUser().set(false)
+        }
+
+        preferences.showNavigationOverlayOnStart()
+            .register({ navigationOverlayOnStart = it })
     }
+
+    protected abstract fun defaultNavigation(): ViewerNavigation
+
+    abstract fun updateNavigation(navigationMode: Int)
 
     fun <T> Preference<T>.register(
         valueAssignment: (T) -> Unit,

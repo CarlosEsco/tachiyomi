@@ -52,7 +52,7 @@ class CategoryPresenter(
         val cat = Category.create(name)
 
         // Set the new item in the last position.
-        cat.order = categories.map { it.order + 1 }.max() ?: 0
+        cat.order = categories.map { it.order + 1 }.maxOrNull() ?: 0
 
         // Insert into database.
         db.insertCategory(cat).asRxObservable().subscribe()
@@ -101,6 +101,6 @@ class CategoryPresenter(
      * Returns true if a category with the given name already exists.
      */
     private fun categoryExists(name: String): Boolean {
-        return categories.any { it.name.equals(name, true) }
+        return categories.any { it.name == name }
     }
 }

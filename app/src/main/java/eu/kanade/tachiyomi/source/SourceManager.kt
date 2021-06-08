@@ -32,11 +32,11 @@ open class SourceManager(private val context: Context) {
 
     fun getCatalogueSources() = sourcesMap.values.filterIsInstance<CatalogueSource>()
 
-    internal fun registerSource(source: Source, overwrite: Boolean = false) {
-        if (overwrite || !sourcesMap.containsKey(source.id)) {
+    internal fun registerSource(source: Source) {
+        if (!sourcesMap.containsKey(source.id)) {
             sourcesMap[source.id] = source
         }
-        if (overwrite || !stubSourcesMap.containsKey(source.id)) {
+        if (!stubSourcesMap.containsKey(source.id)) {
             stubSourcesMap[source.id] = StubSource(source.id)
         }
     }
@@ -49,7 +49,7 @@ open class SourceManager(private val context: Context) {
         LocalSource(context)
     )
 
-    private inner class StubSource(override val id: Long) : Source {
+    inner class StubSource(override val id: Long) : Source {
 
         override val name: String
             get() = id.toString()

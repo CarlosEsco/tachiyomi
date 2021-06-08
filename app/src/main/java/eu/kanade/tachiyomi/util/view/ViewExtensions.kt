@@ -2,21 +2,26 @@
 
 package eu.kanade.tachiyomi.util.view
 
-import android.graphics.Color
+import android.annotation.SuppressLint
 import android.graphics.Point
 import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.widget.TextView
 import androidx.annotation.MenuRes
+import androidx.annotation.StringRes
+import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.widget.TooltipCompat
+import androidx.core.content.ContextCompat
+import androidx.core.view.forEach
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.util.system.getResourceColor
 
 /**
  * Returns coordinates of view.
@@ -33,13 +38,33 @@ fun View.getCoordinates() = Point((left + right) / 2, (top + bottom) / 2)
  * @param length the duration of the snack.
  * @param f a function to execute in the snack, allowing for example to define a custom action.
  */
-inline fun View.snack(message: String, length: Int = Snackbar.LENGTH_LONG, f: Snackbar.() -> Unit): Snackbar {
+inline fun View.snack(
+    message: String,
+    length: Int = Snackbar.LENGTH_LONG,
+    f: Snackbar.() -> Unit = {}
+): Snackbar {
     val snack = Snackbar.make(this, message, length)
-    val textView: TextView = snack.view.findViewById(com.google.android.material.R.id.snackbar_text)
-    textView.setTextColor(Color.WHITE)
     snack.f()
     snack.show()
     return snack
+}
+
+/**
+ * Adds a tooltip shown on long press.
+ *
+ * @param stringRes String resource for tooltip.
+ */
+inline fun View.setTooltip(@StringRes stringRes: Int) {
+    setTooltip(context.getString(stringRes))
+}
+
+/**
+ * Adds a tooltip shown on long press.
+ *
+ * @param text Text for tooltip.
+ */
+inline fun View.setTooltip(text: String) {
+    TooltipCompat.setTooltipText(this, text)
 }
 
 /**
@@ -49,36 +74,64 @@ inline fun View.snack(message: String, length: Int = Snackbar.LENGTH_LONG, f: Sn
  * @param initMenu function to execute when the menu after is inflated.
  * @param onMenuItemClick function to execute when a menu item is clicked.
  */
-fun View.popupMenu(@MenuRes menuRes: Int, initMenu: (Menu.() -> Unit)? = null, onMenuItemClick: MenuItem.() -> Boolean) {
+inline fun View.popupMenu(
+    @MenuRes menuRes: Int,
+    noinline initMenu: (Menu.() -> Unit)? = null,
+    noinline onMenuItemClick: MenuItem.() -> Unit
+): PopupMenu {
     val popup = PopupMenu(context, this, Gravity.NO_GRAVITY, R.attr.actionOverflowMenuStyle, 0)
     popup.menuInflater.inflate(menuRes, popup.menu)
 
     if (initMenu != null) {
         popup.menu.initMenu()
     }
-    popup.setOnMenuItemClickListener { it.onMenuItemClick() }
+    popup.setOnMenuItemClickListener {
+        it.onMenuItemClick()
+        true
+    }
 
     popup.show()
+    return popup
 }
 
-inline fun View.visible() {
-    visibility = View.VISIBLE
-}
+/**
+ * Shows a popup menu on top of this view.
+ *
+ * @param items menu item names to inflate the menu with. List of itemId to stringRes pairs.
+ * @param selectedItemId optionally show a checkmark beside an item with this itemId.
+ * @param onMenuItemClick function to execute when a menu item is clicked.
+ */
+@SuppressLint("RestrictedApi")
+inline fun View.popupMenu(
+    items: List<Pair<Int, Int>>,
+    selectedItemId: Int? = null,
+    noinline onMenuItemClick: MenuItem.() -> Unit
+): PopupMenu {
+    val popup = PopupMenu(context, this, Gravity.NO_GRAVITY, R.attr.actionOverflowMenuStyle, 0)
+    items.forEach { (id, stringRes) ->
+        popup.menu.add(0, id, 0, stringRes)
+    }
 
-inline fun View.invisible() {
-    visibility = View.INVISIBLE
-}
+    if (selectedItemId != null) {
+        (popup.menu as? MenuBuilder)?.setOptionalIconsVisible(true)
+        val emptyIcon = ContextCompat.getDrawable(context, R.drawable.ic_blank_24dp)
+        popup.menu.forEach { item ->
+            item.icon = when (item.itemId) {
+                selectedItemId -> ContextCompat.getDrawable(context, R.drawable.ic_check_24dp)?.mutate()?.apply {
+                    setTint(context.getResourceColor(android.R.attr.textColorPrimary))
+                }
+                else -> emptyIcon
+            }
+        }
+    }
 
-inline fun View.gone() {
-    visibility = View.GONE
-}
+    popup.setOnMenuItemClickListener {
+        it.onMenuItemClick()
+        true
+    }
 
-inline fun View.visibleIf(block: () -> Boolean) {
-    visibility = if (block()) View.VISIBLE else View.GONE
-}
-
-inline fun View.toggle() {
-    visibleIf { visibility == View.GONE }
+    popup.show()
+    return popup
 }
 
 /**
@@ -86,8 +139,8 @@ inline fun View.toggle() {
  *
  * @param recycler [RecyclerView] that the FAB should shrink/extend in response to.
  */
-fun ExtendedFloatingActionButton.shrinkOnScroll(recycler: RecyclerView) {
-    recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+inline fun ExtendedFloatingActionButton.shrinkOnScroll(recycler: RecyclerView): RecyclerView.OnScrollListener {
+    val listener = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             if (dy <= 0) {
                 extend()
@@ -95,7 +148,9 @@ fun ExtendedFloatingActionButton.shrinkOnScroll(recycler: RecyclerView) {
                 shrink()
             }
         }
-    })
+    }
+    recycler.addOnScrollListener(listener)
+    return listener
 }
 
 /**
@@ -104,7 +159,10 @@ fun ExtendedFloatingActionButton.shrinkOnScroll(recycler: RecyclerView) {
  * @param items List of strings that are shown as individual chips.
  * @param onClick Optional on click listener for each chip.
  */
-fun ChipGroup.setChips(items: List<String>?, onClick: (item: String) -> Unit = {}) {
+inline fun ChipGroup.setChips(
+    items: List<String>?,
+    noinline onClick: (item: String) -> Unit = {}
+) {
     removeAllViews()
 
     items?.forEach { item ->

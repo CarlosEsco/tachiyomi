@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.CheckedTextView
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.RadioButton
 import android.widget.Spinner
 import android.widget.TextView
@@ -16,10 +17,9 @@ import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R
-import com.google.android.material.internal.ScrimInsetsFrameLayout
 import com.google.android.material.textfield.TextInputLayout
-import eu.kanade.tachiyomi.R as TR
 import eu.kanade.tachiyomi.util.view.inflate
+import eu.kanade.tachiyomi.R as TR
 
 @Suppress("LeakingThis")
 @SuppressLint("PrivateResource", "RestrictedApi")
@@ -27,7 +27,7 @@ open class SimpleNavigationView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : ScrimInsetsFrameLayout(context, attrs, defStyleAttr) {
+) : FrameLayout(context, attrs, defStyleAttr) {
 
     /**
      * Recycler view containing all the items.
@@ -37,20 +37,24 @@ open class SimpleNavigationView @JvmOverloads constructor(
     init {
         // Custom attributes
         val a = TintTypedArray.obtainStyledAttributes(
-            context, attrs,
-            R.styleable.NavigationView, defStyleAttr,
+            context,
+            attrs,
+            R.styleable.NavigationView,
+            defStyleAttr,
             R.style.Widget_Design_NavigationView
         )
 
         ViewCompat.setBackground(
-            this, a.getDrawable(R.styleable.NavigationView_android_background)
+            this,
+            a.getDrawable(R.styleable.NavigationView_android_background)
         )
 
         if (a.hasValue(R.styleable.NavigationView_elevation)) {
             ViewCompat.setElevation(
                 this,
                 a.getDimensionPixelSize(
-                    R.styleable.NavigationView_elevation, 0
+                    R.styleable.NavigationView_elevation,
+                    0
                 ).toFloat()
             )
         }

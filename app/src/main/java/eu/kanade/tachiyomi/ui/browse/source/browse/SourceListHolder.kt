@@ -1,15 +1,15 @@
 package eu.kanade.tachiyomi.ui.browse.source.browse
 
 import android.view.View
-import com.bumptech.glide.load.engine.DiskCacheStrategy
+import coil.clear
+import coil.loadAny
+import coil.transform.RoundedCornersTransformation
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.database.models.Manga
-import eu.kanade.tachiyomi.data.glide.GlideApp
-import eu.kanade.tachiyomi.data.glide.toMangaThumbnail
+import eu.kanade.tachiyomi.databinding.SourceListItemBinding
 import eu.kanade.tachiyomi.util.system.getResourceColor
-import kotlinx.android.synthetic.main.source_list_item.thumbnail
-import kotlinx.android.synthetic.main.source_list_item.title
 
 /**
  * Class used to hold the displayed data of a manga in the catalogue, like the cover or the title.
@@ -20,7 +20,9 @@ import kotlinx.android.synthetic.main.source_list_item.title
  * @constructor creates a new catalogue holder.
  */
 class SourceListHolder(private val view: View, adapter: FlexibleAdapter<*>) :
-    SourceHolder(view, adapter) {
+    SourceHolder<SourceListItemBinding>(view, adapter) {
+
+    override val binding = SourceListItemBinding.bind(view)
 
     private val favoriteColor = view.context.getResourceColor(R.attr.colorOnSurface, 0.38f)
     private val unfavoriteColor = view.context.getResourceColor(R.attr.colorOnSurface)
@@ -32,23 +34,23 @@ class SourceListHolder(private val view: View, adapter: FlexibleAdapter<*>) :
      * @param manga the manga to bind.
      */
     override fun onSetValues(manga: Manga) {
-        title.text = manga.title
-        title.setTextColor(if (manga.favorite) favoriteColor else unfavoriteColor)
+        binding.title.text = manga.title
+        binding.title.setTextColor(if (manga.favorite) favoriteColor else unfavoriteColor)
+
+        // Set alpha of thumbnail.
+        binding.thumbnail.alpha = if (manga.favorite) 0.3f else 1.0f
 
         setImage(manga)
     }
 
     override fun setImage(manga: Manga) {
-        GlideApp.with(view.context).clear(thumbnail)
+        binding.thumbnail.clear()
         if (!manga.thumbnail_url.isNullOrEmpty()) {
-            GlideApp.with(view.context)
-                .load(manga.toMangaThumbnail())
-                .diskCacheStrategy(DiskCacheStrategy.DATA)
-                .centerCrop()
-                .circleCrop()
-                .dontAnimate()
-                .placeholder(android.R.color.transparent)
-                .into(thumbnail)
+            val radius = view.context.resources.getDimension(R.dimen.card_radius)
+            binding.thumbnail.loadAny(manga) {
+                setParameter(MangaCoverFetcher.USE_CUSTOM_COVER, false)
+                transformations(RoundedCornersTransformation(radius))
+            }
         }
     }
 }

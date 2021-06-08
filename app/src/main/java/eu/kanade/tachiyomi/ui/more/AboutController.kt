@@ -1,138 +1,100 @@
 package eu.kanade.tachiyomi.ui.more
 
 import android.app.Dialog
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
+import androidx.core.os.bundleOf
 import androidx.preference.PreferenceScreen
 import com.afollestad.materialdialogs.MaterialDialog
-import com.google.android.gms.oss.licenses.OssLicensesMenuActivity
+import com.mikepenz.aboutlibraries.LibsBuilder
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.updater.UpdateChecker
-import eu.kanade.tachiyomi.data.updater.UpdateResult
+import eu.kanade.tachiyomi.data.updater.GithubUpdateChecker
+import eu.kanade.tachiyomi.data.updater.GithubUpdateResult
 import eu.kanade.tachiyomi.data.updater.UpdaterService
 import eu.kanade.tachiyomi.ui.base.controller.DialogController
-import eu.kanade.tachiyomi.ui.main.ChangelogDialogController
+import eu.kanade.tachiyomi.ui.base.controller.NoToolbarElevationController
+import eu.kanade.tachiyomi.ui.base.controller.openInBrowser
 import eu.kanade.tachiyomi.ui.setting.SettingsController
+import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.lang.launchNow
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
+import eu.kanade.tachiyomi.util.preference.add
 import eu.kanade.tachiyomi.util.preference.onClick
 import eu.kanade.tachiyomi.util.preference.preference
-import eu.kanade.tachiyomi.util.preference.preferenceCategory
 import eu.kanade.tachiyomi.util.preference.titleRes
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.toast
+import timber.log.Timber
 import java.text.DateFormat
-import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
-import timber.log.Timber
 
-class AboutController : SettingsController() {
+class AboutController : SettingsController(), NoToolbarElevationController {
 
-    /**
-     * Checks for new releases
-     */
-    private val updateChecker by lazy { UpdateChecker.getUpdateChecker() }
+    private val updateChecker by lazy { GithubUpdateChecker() }
 
     private val dateFormat: DateFormat = preferences.dateFormat()
 
     private val isUpdaterEnabled = BuildConfig.INCLUDE_UPDATER
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) = with(screen) {
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = R.string.pref_category_about
 
+        add(MoreHeaderPreference(context))
+
         preference {
+            key = "pref_about_version"
             titleRes = R.string.version
             summary = if (BuildConfig.DEBUG) {
-                "Preview r${BuildConfig.COMMIT_COUNT} (${BuildConfig.COMMIT_SHA})"
+                "Preview r${BuildConfig.COMMIT_COUNT} (${BuildConfig.COMMIT_SHA}, ${getFormattedBuildTime()})"
             } else {
-                "Stable ${BuildConfig.VERSION_NAME}"
+                "Stable ${BuildConfig.VERSION_NAME} (${getFormattedBuildTime()})"
             }
 
-            onClick { copyDebugInfo() }
-        }
-        preference {
-            titleRes = R.string.build_time
-            summary = getFormattedBuildTime()
+            onClick {
+                activity?.let {
+                    val deviceInfo = CrashLogUtil(it).getDebugInfo()
+                    it.copyToClipboard("Debug information", deviceInfo)
+                }
+            }
         }
         if (isUpdaterEnabled) {
             preference {
+                key = "pref_about_check_for_updates"
                 titleRes = R.string.check_for_updates
 
                 onClick { checkVersion() }
             }
         }
         preference {
-            titleRes = R.string.changelog
+            key = "pref_about_whats_new"
+            titleRes = R.string.whats_new
 
             onClick {
-                if (BuildConfig.DEBUG) {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/inorichi/tachiyomi/commits/dev"))
-                    startActivity(intent)
+                val url = if (BuildConfig.DEBUG) {
+                    "https://github.com/tachiyomiorg/tachiyomi-preview/releases/tag/r${BuildConfig.COMMIT_COUNT}"
                 } else {
-                    ChangelogDialogController().showDialog(router)
+                    "https://github.com/tachiyomiorg/tachiyomi/releases/tag/v${BuildConfig.VERSION_NAME}"
                 }
+                openInBrowser(url)
             }
         }
-        if (BuildConfig.DEBUG) {
-            preference {
-                titleRes = R.string.notices
-
-                onClick {
-                    ChangelogDialogController().showDialog(router)
-                }
+        preference {
+            key = "pref_about_licenses"
+            titleRes = R.string.licenses
+            onClick {
+                LibsBuilder()
+                    .withActivityTitle(activity!!.getString(R.string.licenses))
+                    .withAboutIconShown(false)
+                    .withAboutVersionShown(false)
+                    .withLicenseShown(true)
+                    .withEdgeToEdge(true)
+                    .start(activity!!)
             }
         }
 
-        preferenceCategory {
-            preference {
-                titleRes = R.string.website
-                val url = "https://tachiyomi.org"
-                summary = url
-                onClick {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
-                }
-            }
-            preference {
-                title = "Discord"
-                val url = "https://discord.gg/tachiyomi"
-                summary = url
-                onClick {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
-                }
-            }
-            preference {
-                title = "GitHub"
-                val url = "https://github.com/inorichi/tachiyomi"
-                summary = url
-                onClick {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
-                }
-            }
-            preference {
-                titleRes = R.string.label_extensions
-                val url = "https://github.com/inorichi/tachiyomi-extensions"
-                summary = url
-                onClick {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
-                }
-            }
-            preference {
-                titleRes = R.string.licenses
-
-                onClick {
-                    startActivity(Intent(activity, OssLicensesMenuActivity::class.java))
-                }
-            }
-        }
+        add(AboutLinksPreference(context))
     }
 
     /**
@@ -146,14 +108,14 @@ class AboutController : SettingsController() {
         launchNow {
             try {
                 when (val result = updateChecker.checkForUpdate()) {
-                    is UpdateResult.NewUpdate<*> -> {
+                    is GithubUpdateResult.NewUpdate -> {
                         val body = result.release.info
-                        val url = result.release.downloadLink
+                        val url = result.release.getDownloadLink()
 
                         // Create confirmation window
                         NewUpdateDialogController(body, url).showDialog(router)
                     }
-                    is UpdateResult.NoNewUpdate -> {
+                    is GithubUpdateResult.NoNewUpdate -> {
                         activity?.toast(R.string.update_check_no_new_updates)
                     }
                 }
@@ -167,10 +129,7 @@ class AboutController : SettingsController() {
     class NewUpdateDialogController(bundle: Bundle? = null) : DialogController(bundle) {
 
         constructor(body: String, url: String) : this(
-            Bundle().apply {
-                putString(BODY_KEY, body)
-                putString(URL_KEY, url)
-            }
+            bundleOf(BODY_KEY to body, URL_KEY to url)
         )
 
         override fun onCreateDialog(savedViewState: Bundle?): Dialog {
@@ -194,22 +153,6 @@ class AboutController : SettingsController() {
         }
     }
 
-    private fun copyDebugInfo() {
-        val deviceInfo =
-            """
-            App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR}, ${BuildConfig.COMMIT_SHA}, ${BuildConfig.VERSION_CODE})
-            Android version: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})
-            Android build ID: ${Build.DISPLAY}
-            Device brand: ${Build.BRAND}
-            Device manufacturer: ${Build.MANUFACTURER}
-            Device name: ${Build.DEVICE}
-            Device model: ${Build.MODEL}
-            Device product name: ${Build.PRODUCT}
-            """.trimIndent()
-
-        activity?.copyToClipboard("Debug information", deviceInfo)
-    }
-
     private fun getFormattedBuildTime(): String {
         return try {
             val inputDf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US)
@@ -217,12 +160,14 @@ class AboutController : SettingsController() {
             val buildTime = inputDf.parse(BuildConfig.BUILD_TIME)
 
             val outputDf = DateFormat.getDateTimeInstance(
-                DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault()
+                DateFormat.MEDIUM,
+                DateFormat.SHORT,
+                Locale.getDefault()
             )
             outputDf.timeZone = TimeZone.getDefault()
 
-            buildTime.toDateTimestampString(dateFormat)
-        } catch (e: ParseException) {
+            buildTime!!.toDateTimestampString(dateFormat)
+        } catch (e: Exception) {
             BuildConfig.BUILD_TIME
         }
     }

@@ -1,30 +1,35 @@
 package eu.kanade.tachiyomi.ui.manga.chapter
 
-import android.text.SpannableString
 import android.text.SpannableStringBuilder
-import android.text.style.ForegroundColorSpan
 import android.view.View
+import androidx.core.text.buildSpannedString
+import androidx.core.text.color
+import androidx.core.view.isVisible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
-import eu.kanade.tachiyomi.data.download.model.Download
-import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
-import eu.kanade.tachiyomi.util.view.visibleIf
+import eu.kanade.tachiyomi.databinding.ChaptersItemBinding
+import eu.kanade.tachiyomi.source.LocalSource
+import eu.kanade.tachiyomi.ui.manga.chapter.base.BaseChapterHolder
 import java.util.Date
-import kotlinx.android.synthetic.main.chapters_item.bookmark_icon
-import kotlinx.android.synthetic.main.chapters_item.chapter_description
-import kotlinx.android.synthetic.main.chapters_item.chapter_title
-import kotlinx.android.synthetic.main.chapters_item.download_text
 
 class ChapterHolder(
     view: View,
     private val adapter: ChaptersAdapter
-) : BaseFlexibleViewHolder(view, adapter) {
+) : BaseChapterHolder(view, adapter) {
+
+    private val binding = ChaptersItemBinding.bind(view)
+
+    init {
+        binding.download.setOnClickListener {
+            onDownloadClick(it, bindingAdapterPosition)
+        }
+    }
 
     fun bind(item: ChapterItem, manga: Manga) {
         val chapter = item.chapter
 
-        chapter_title.text = when (manga.displayMode) {
-            Manga.DISPLAY_NUMBER -> {
+        binding.chapterTitle.text = when (manga.displayMode) {
+            Manga.CHAPTER_DISPLAY_NUMBER -> {
                 val number = adapter.decimalFormat.format(chapter.chapter_number.toDouble())
                 itemView.context.getString(R.string.display_mode_chapter, number)
             }
@@ -32,15 +37,21 @@ class ChapterHolder(
         }
 
         // Set correct text color
-        val chapterColor = when {
+        val chapterTitleColor = when {
             chapter.read -> adapter.readColor
             chapter.bookmark -> adapter.bookmarkedColor
             else -> adapter.unreadColor
         }
-        chapter_title.setTextColor(chapterColor)
-        chapter_description.setTextColor(chapterColor)
+        binding.chapterTitle.setTextColor(chapterTitleColor)
 
-        bookmark_icon.visibleIf { chapter.bookmark }
+        val chapterDescriptionColor = when {
+            chapter.read -> adapter.readColor
+            chapter.bookmark -> adapter.bookmarkedColor
+            else -> adapter.unreadColorSecondary
+        }
+        binding.chapterDescription.setTextColor(chapterDescriptionColor)
+
+        binding.bookmarkIcon.isVisible = chapter.bookmark
 
         val descriptions = mutableListOf<CharSequence>()
 
@@ -48,8 +59,10 @@ class ChapterHolder(
             descriptions.add(adapter.dateFormat.format(Date(chapter.date_upload)))
         }
         if (!chapter.read && chapter.last_page_read > 0) {
-            val lastPageRead = SpannableString(itemView.context.getString(R.string.chapter_progress, chapter.last_page_read + 1)).apply {
-                setSpan(ForegroundColorSpan(adapter.readColor), 0, length, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val lastPageRead = buildSpannedString {
+                color(adapter.readColor) {
+                    append(itemView.context.getString(R.string.chapter_progress, chapter.last_page_read + 1))
+                }
             }
             descriptions.add(lastPageRead)
         }
@@ -58,21 +71,12 @@ class ChapterHolder(
         }
 
         if (descriptions.isNotEmpty()) {
-            chapter_description.text = descriptions.joinTo(SpannableStringBuilder(), " • ")
+            binding.chapterDescription.text = descriptions.joinTo(SpannableStringBuilder(), " • ")
         } else {
-            chapter_description.text = ""
+            binding.chapterDescription.text = ""
         }
 
-        notifyStatus(item.status)
-    }
-
-    fun notifyStatus(status: Int) = with(download_text) {
-        when (status) {
-            Download.QUEUE -> setText(R.string.chapter_queued)
-            Download.DOWNLOADING -> setText(R.string.chapter_downloading)
-            Download.DOWNLOADED -> setText(R.string.chapter_downloaded)
-            Download.ERROR -> setText(R.string.chapter_error)
-            else -> text = ""
-        }
+        binding.download.isVisible = item.manga.source != LocalSource.ID
+        binding.download.setState(item.status, item.progress)
     }
 }

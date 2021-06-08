@@ -9,13 +9,13 @@ import eu.kanade.tachiyomi.data.database.models.MangaChapterHistory
 import eu.kanade.tachiyomi.ui.base.presenter.BasePresenter
 import eu.kanade.tachiyomi.ui.recent.DateSectionItem
 import eu.kanade.tachiyomi.util.lang.toDateKey
-import java.util.Calendar
-import java.util.Comparator
-import java.util.Date
-import java.util.TreeMap
 import rx.Observable
+import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import uy.kohesive.injekt.injectLazy
+import java.util.Calendar
+import java.util.Date
+import java.util.TreeMap
 
 /**
  * Presenter of HistoryFragment.
@@ -29,26 +29,37 @@ class HistoryPresenter : BasePresenter<HistoryController>() {
      */
     val db: DatabaseHelper by injectLazy()
 
+    private var recentMangaSubscription: Subscription? = null
+
     override fun onCreate(savedState: Bundle?) {
         super.onCreate(savedState)
 
         // Used to get a list of recently read manga
-        getRecentMangaObservable()
-            .subscribeLatestCache(HistoryController::onNextManga)
+        updateList()
+    }
+
+    fun requestNext(offset: Int, search: String = "") {
+        getRecentMangaObservable(offset = offset, search = search)
+            .subscribeLatestCache(
+                { view, mangas ->
+                    view.onNextManga(mangas)
+                },
+                HistoryController::onAddPageError
+            )
     }
 
     /**
      * Get recent manga observable
      * @return list of history
      */
-    fun getRecentMangaObservable(): Observable<List<HistoryItem>> {
+    private fun getRecentMangaObservable(limit: Int = 25, offset: Int = 0, search: String = ""): Observable<List<HistoryItem>> {
         // Set date limit for recent manga
         val cal = Calendar.getInstance().apply {
             time = Date()
-            add(Calendar.MONTH, -3)
+            add(Calendar.YEAR, -50)
         }
 
-        return db.getRecentManga(cal.time).asRxObservable()
+        return db.getRecentManga(cal.time, limit, offset, search).asRxObservable()
             .map { recents ->
                 val map = TreeMap<Date, MutableList<MangaChapterHistory>> { d1, d2 -> d2.compareTo(d1) }
                 val byDay = recents
@@ -69,6 +80,21 @@ class HistoryPresenter : BasePresenter<HistoryController>() {
         history.last_read = 0L
         db.updateHistoryLastRead(history).asRxObservable()
             .subscribe()
+    }
+
+    /**
+     * Pull a list of history from the db
+     * @param search a search query to use for filtering
+     */
+    fun updateList(search: String = "") {
+        recentMangaSubscription?.unsubscribe()
+        recentMangaSubscription = getRecentMangaObservable(search = search)
+            .subscribeLatestCache(
+                { view, mangas ->
+                    view.onNextManga(mangas, true)
+                },
+                HistoryController::onAddPageError
+            )
     }
 
     /**
@@ -96,18 +122,19 @@ class HistoryPresenter : BasePresenter<HistoryController>() {
         }
 
         val sortFunction: (Chapter, Chapter) -> Int = when (manga.sorting) {
-            Manga.SORTING_SOURCE -> { c1, c2 -> c2.source_order.compareTo(c1.source_order) }
-            Manga.SORTING_NUMBER -> { c1, c2 -> c1.chapter_number.compareTo(c2.chapter_number) }
+            Manga.CHAPTER_SORTING_SOURCE -> { c1, c2 -> c2.source_order.compareTo(c1.source_order) }
+            Manga.CHAPTER_SORTING_NUMBER -> { c1, c2 -> c1.chapter_number.compareTo(c2.chapter_number) }
+            Manga.CHAPTER_SORTING_UPLOAD_DATE -> { c1, c2 -> c1.date_upload.compareTo(c2.date_upload) }
             else -> throw NotImplementedError("Unknown sorting method")
         }
 
         val chapters = db.getChapters(manga).executeAsBlocking()
-            .sortedWith(Comparator { c1, c2 -> sortFunction(c1, c2) })
+            .sortedWith { c1, c2 -> sortFunction(c1, c2) }
 
         val currChapterIndex = chapters.indexOfFirst { chapter.id == it.id }
         return when (manga.sorting) {
-            Manga.SORTING_SOURCE -> chapters.getOrNull(currChapterIndex + 1)
-            Manga.SORTING_NUMBER -> {
+            Manga.CHAPTER_SORTING_SOURCE -> chapters.getOrNull(currChapterIndex + 1)
+            Manga.CHAPTER_SORTING_NUMBER -> {
                 val chapterNumber = chapter.chapter_number
 
                 ((currChapterIndex + 1) until chapters.size)
@@ -116,6 +143,10 @@ class HistoryPresenter : BasePresenter<HistoryController>() {
                         it.chapter_number > chapterNumber &&
                             it.chapter_number <= chapterNumber + 1
                     }
+            }
+            Manga.CHAPTER_SORTING_UPLOAD_DATE -> {
+                chapters.drop(currChapterIndex + 1)
+                    .firstOrNull { it.date_upload >= chapter.date_upload }
             }
             else -> throw NotImplementedError("Unknown sorting method")
         }

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root_coordinator"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -8,7 +10,8 @@
     <eu.kanade.tachiyomi.widget.ElevationAppBarLayout
         android:id="@+id/appbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:fitsSystemWindows="true">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -16,13 +19,49 @@
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/colorPrimary"
             android:theme="?attr/actionBarTheme"
-            app:layout_scrollFlags="scroll|enterAlways|snap" />
+            app:layout_scrollFlags="scroll|enterAlways" />
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabs"
             style="@style/Theme.Widget.Tabs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
+
+        <FrameLayout
+            android:id="@+id/downloaded_only"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorTertiary"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:padding="4dp"
+                android:text="@string/label_downloaded_only"
+                android:textColor="?attr/colorOnTertiary" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/incognito_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/md_grey_800"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:padding="4dp"
+                android:text="@string/pref_incognito_mode"
+                android:textColor="@color/md_white_1000" />
+
+        </FrameLayout>
 
     </eu.kanade.tachiyomi.widget.ElevationAppBarLayout>
 
@@ -32,15 +71,21 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
+    <include
+        android:id="@+id/fab_layout"
+        layout="@layout/main_activity_fab" />
+
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_nav"
         style="@style/Widget.MaterialComponents.BottomNavigationView.Colored"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        app:itemIconTint="@color/nav_selector"
+        app:itemRippleColor="?attr/rippleSecondaryColor"
+        app:itemTextColor="@color/nav_selector"
         app:labelVisibilityMode="labeled"
         app:layout_insetEdge="bottom"
-        app:layout_behavior="@string/hide_bottom_view_on_scroll_behavior"
-        app:menu="@menu/bottom_nav" />
+        app:menu="@menu/main_nav" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
